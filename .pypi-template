@@ -1,0 +1,29 @@
+a_description_for_the_package: This package provides API and functionality to efficiently
+  compute quantiles for anomaly detection in service/system logs. Developed under
+  LogFlow-AI initiative.
+classifiers:
+- 'Programming Language :: Python'
+console_scripts: []
+first_year_of_publication: '2025'
+github_account: LogFlow-AI
+github_repo_name: GPUQuantile
+keywords_describing_the_package: GPUQuantile
+license: Apache
+package_module_name: GPUQuantile
+package_name: GPUQuantile
+package_tagline: This package provides API and functionality to efficiently compute
+  quantiles for anomaly detection in service/system logs. Developed under LogFlow-AI
+  initiative.
+package_title: GPUQuantile
+readme: .github/README.md
+requires:
+- numpy
+- pandas
+- pytest
+- coverage
+scripts: []
+version: 0.8.0
+your_author_name: Dhyey Dharmendrakumar Mavani
+your_email_address: ddmavani2003@gmail.com
+your_full_name: Dhyey Dharmendrakumar Mavani
+your_name: Dhyey Mavani
