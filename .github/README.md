@@ -13,5 +13,3 @@
 ## Documentation
 
 Visit [Read the Docs](https://GPUQuantile.readthedocs.org) for the full documentation, including overviews and several examples.
-
-
