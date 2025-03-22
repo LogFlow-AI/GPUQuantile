@@ -13,4 +13,4 @@ class MappingScheme(ABC):
     @abstractmethod
     def compute_value_from_index(self, index: int) -> float:
         """Compute the representative value for a given bucket index."""
-        pass 
+        pass

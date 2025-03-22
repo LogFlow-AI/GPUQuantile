@@ -3,8 +3,8 @@
 from typing import Literal, Union
 from .mapping.base import MappingScheme
 from .mapping.logarithmic import LogarithmicMapping
-from .mapping.linear import LinearInterpolationMapping
-from .mapping.cubic import CubicInterpolationMapping
+from .mapping.linear_interpolation import LinearInterpolationMapping
+from .mapping.cubic_interpolation import CubicInterpolationMapping
 from .storage.base import BucketManagementStrategy
 from .storage.contiguous import ContiguousStorage
 from .storage.sparse import SparseStorage
