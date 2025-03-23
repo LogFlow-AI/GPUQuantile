@@ -193,6 +193,5 @@ class ContiguousStorage(Storage):
         self.num_buckets -= 1
         
         # Update min_index and head
-        old_min = self.min_index
         self.min_index += second_pos - first_pos
         self.head = second_pos 

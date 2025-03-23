@@ -1,7 +1,6 @@
 """Core DDSketch implementation."""
 
 from typing import Literal, Union
-from .mapping.base import MappingScheme
 from .mapping.logarithmic import LogarithmicMapping
 from .mapping.linear_interpolation import LinearInterpolationMapping
 from .mapping.cubic_interpolation import CubicInterpolationMapping
