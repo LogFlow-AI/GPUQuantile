@@ -20,7 +20,7 @@ accurate quantile estimates with minimal memory overhead.
 from GPUQuantile.ddsketch.core import DDSketch
 from GPUQuantile.momentsketch.core import MomentSketch
 
-__version__ = "0.0.1"
+__version__ = "0.0.2"
 __all__ = [
   "DDSketch",
   "MomentSketch"
