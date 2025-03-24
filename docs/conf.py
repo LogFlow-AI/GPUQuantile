@@ -6,9 +6,6 @@
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-import sys
-import os
-import inspect
 import GPUQuantile
 
 project = 'GPUQuantile'
