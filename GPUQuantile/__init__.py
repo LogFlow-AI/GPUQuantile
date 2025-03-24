@@ -20,10 +20,26 @@ accurate quantile estimates with minimal memory overhead.
 from GPUQuantile.ddsketch.core import DDSketch
 from GPUQuantile.momentsketch.core import MomentSketch
 
-__version__ = "0.0.2"
+# Also import the main components for direct access
+from GPUQuantile.ddsketch import (
+    LogarithmicMapping,
+    LinearInterpolationMapping,
+    CubicInterpolationMapping,
+    ContiguousStorage,
+    SparseStorage,
+    BucketManagementStrategy
+)
+
+__version__ = "0.0.3"
 __all__ = [
-  "DDSketch",
-  "MomentSketch"
+    "DDSketch",
+    "MomentSketch",
+    "LogarithmicMapping",
+    "LinearInterpolationMapping",
+    "CubicInterpolationMapping",
+    "ContiguousStorage",
+    "SparseStorage",
+    "BucketManagementStrategy"
 ]
 
 if __name__ == "__main__":
