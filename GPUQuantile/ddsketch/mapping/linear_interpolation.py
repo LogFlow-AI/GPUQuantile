@@ -10,10 +10,10 @@ import numpy as np
 from .base import MappingScheme
 
 class LinearInterpolationMapping(MappingScheme):
-    def __init__(self, alpha: float):
-        self.alpha = alpha
-        self.gamma = (1 + alpha) / (1 - alpha)
-        self.log2_gamma = np.log2(self.gamma)
+    def __init__(self, relative_accuracy: float):
+        self.relative_accuracy = relative_accuracy
+        self.gamma = (1 + relative_accuracy) / (1 - relative_accuracy)
+        self.log_gamma = np.log(self.gamma)
         
     def _extract_exponent(self, value: float) -> tuple[int, float]:
         """
@@ -23,10 +23,10 @@ class LinearInterpolationMapping(MappingScheme):
             tuple: (exponent, normalized_fraction)
             where normalized_fraction is in [1, 2)
         """
-        # Convert float to its binary representation
-        bits = np.frexp(value)
-        exponent = bits[1] - 1  # frexp returns 2's exponent, we need floor(log2)
-        normalized_fraction = bits[0] * 2  # Scale to [1, 2)
+        # Use numpy's frexp for better numerical precision
+        mantissa, exponent = np.frexp(value)
+        exponent = exponent - 1  # Convert to floor(log2)
+        normalized_fraction = mantissa * 2  # Scale to [1, 2)
         return exponent, normalized_fraction
         
     def compute_bucket_index(self, value: float) -> int:
@@ -40,13 +40,30 @@ class LinearInterpolationMapping(MappingScheme):
         # normalized_fraction is in [1, 2), so we interpolate log_gamma
         log2_fraction = normalized_fraction - 1  # Map [1, 2) to [0, 1)
         
-        # Compute final index using change of base and linear interpolation
-        # index = ceil(log_gamma(value))
-        # log_gamma(value) = log2(value) / log2(gamma)
+        # Compute final index
         log2_value = exponent + log2_fraction
-        return int(np.ceil(log2_value / self.log2_gamma))
+        return int(np.ceil(log2_value / self.log_gamma))
         
     def compute_value_from_index(self, index: int) -> float:
-        # Convert back from index to value using gamma
-        # value = gamma^index
-        return np.power(self.gamma, index)
+        """
+        Compute the value corresponding to a bucket index using the inverse mapping.
+        
+        Args:
+            index: The bucket index
+            
+        Returns:
+            The value at the center of the bucket
+        """
+        # Follow the same approach as LinearlyInterpolatedMapping.value
+        log2_value = index * self.log_gamma
+        
+        # Extract the integer and fractional parts of log2_value
+        exponent = int(np.floor(log2_value) + 1)
+        mantissa = (log2_value - exponent + 2) / 2.0
+        
+        # Use ldexp to efficiently compute 2^exponent * mantissa
+        result = np.ldexp(mantissa, exponent)
+        
+        # Apply the centering factor
+        return result * (2.0 / (1 + self.gamma))
+        

@@ -20,20 +20,26 @@ from .base import MappingScheme
 
 
 class CubicInterpolationMapping(MappingScheme):
-    def __init__(self, alpha: float):
-        self.alpha = alpha
-        self.gamma = (1 + alpha) / (1 - alpha)
+    def __init__(self, relative_accuracy: float):
+        # Correcting factor from Datadog's implementation
+        correcting_factor = 1.0 / (10.0/7.0 * np.log(2))  # 1/(C * log(2))
+        
+        # Apply correcting factor to gamma calculation
+        gamma = (1 + relative_accuracy) / (1 - relative_accuracy)
+        self.gamma = np.power(gamma, correcting_factor)
+        self.relative_accuracy = relative_accuracy
         self.log2_gamma = np.log2(self.gamma)
         
         # Optimal coefficients for cubic interpolation
         # P(s) = As³ + Bs² + Cs where s is in [0,1]
         self.A = 6/35  # Coefficient for cubic term
-        self.B = -3/5    # Coefficient for quadratic term
-        self.C = 10/7      # Coefficient for linear term
+        self.B = -3/5  # Coefficient for quadratic term
+        self.C = 10/7  # Coefficient for linear term
         
         # Multiplier m = 7/(10*log(2)) ≈ 1.01
-        # This gives us the minimum multiplier that maintains α-accuracy
-        self.m = 7.0 / (10.0 * np.log(2))
+        # This gives us the minimum multiplier that maintains relative accuracy guarantee
+        # Divide by C as per Datadog's implementation
+        self.m = (7.0 / (10.0 * np.log(2))) / self.C
         
     def _extract_exponent_and_significand(self, value: float) -> tuple[int, float]:
         """
@@ -53,6 +59,7 @@ class CubicInterpolationMapping(MappingScheme):
         Compute the cubic interpolation P(s) = As³ + Bs² + Cs
         where s is the normalized significand in [0, 1).
         """
+        # Use Datadog's order of operations for better numerical stability
         return s * (self.C + s * (self.B + s * self.A))
         
     def compute_bucket_index(self, value: float) -> int:
@@ -117,5 +124,7 @@ class CubicInterpolationMapping(MappingScheme):
         # Clamp result to [0,1] to handle numerical errors
         s = np.clip(s, 0, 1)
         
-        # Return final value
-        return np.power(2.0, e) * (1 + s)
+        # Apply geometric mean adjustment and proper scaling for cubic interpolation
+        # The multiplier 7.0/10.0 is derived from the optimal cubic interpolation error bound
+        base_value = np.power(2.0, e) * (1 + s)
+        return base_value * (2.0 / (1.0 + self.gamma))

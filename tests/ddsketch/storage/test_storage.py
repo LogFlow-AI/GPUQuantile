@@ -13,7 +13,8 @@ def max_buckets(request):
 
 @pytest.fixture(params=[
     BucketManagementStrategy.FIXED,
-    BucketManagementStrategy.COLLAPSE
+    BucketManagementStrategy.DYNAMIC,
+    BucketManagementStrategy.UNLIMITED
 ])
 def bucket_strategy(request):
     return request.param
