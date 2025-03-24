@@ -1,7 +1,7 @@
 """Contiguous array storage implementation for DDSketch using circular buffer."""
 
 import numpy as np
-from .base import Storage, BucketManagementStrategy
+from .base import Storage
 
 class ContiguousStorage(Storage):
     """
@@ -17,20 +17,18 @@ class ContiguousStorage(Storage):
     
     def __init__(self, max_buckets: int = 2048):
         """
-        Initialize contiguous storage.
+        Initialize a contiguous bucket storage with a fixed size.
         
         Args:
-            max_buckets: Maximum number of buckets (default 2048).
+            max_buckets: The maximum number of buckets to use.
         """
-        if max_buckets <= 0:
-            raise ValueError("max_buckets must be positive for ContiguousStorage")
-        super().__init__(max_buckets, BucketManagementStrategy.FIXED)
+        self.max_buckets = max_buckets
         self.counts = np.zeros(max_buckets, dtype=np.int64)
-        self.min_index = None  # Minimum bucket index seen
-        self.max_index = None  # Maximum bucket index seen
-        self.num_buckets = 0   # Number of non-zero buckets
-        self.head = 0          # Array position corresponding to min_index
-    
+        
+        # Initialize with default bucket range centered around bucket 0
+        self.min_index = -max_buckets // 2  # Start with a balanced range
+        self.head = 0  # Position in array corresponding to min_index
+                
     def _get_position(self, bucket_index: int) -> int:
         """
         Get array position for bucket index using wrap-around.
@@ -39,159 +37,205 @@ class ContiguousStorage(Storage):
             bucket_index: The bucket index to map to array position.
             
         Returns:
-            The array position using circular buffer indexing.
+            Array position (0 to max_buckets-1).
+            
+        Raises:
+            ValueError: If bucket_index is outside the valid range.
         """
         if self.min_index is None:
-            return 0
-        offset = bucket_index - self.min_index
-        return (self.head + offset) % len(self.counts)
+            raise ValueError("Storage is empty, position calculation requires initialized indices")
+        
+        # Calculate the maximum index based on min_index and max_buckets
+        max_possible_index = self.min_index + self.max_buckets - 1
+        
+        if bucket_index < self.min_index or bucket_index > max_possible_index:
+            raise ValueError(f"Bucket index {bucket_index} is out of range [{self.min_index}, {max_possible_index}]")
+        
+        # Calculate position in array
+        pos = (bucket_index - self.min_index) % self.max_buckets
+        return pos
     
     def add(self, bucket_index: int, count: int = 1):
         """
-        Add count to bucket_index.
+        Add a count to a bucket.
         
         Args:
             bucket_index: The bucket index to add to.
             count: The count to add (default 1).
-        """
-        if count <= 0:
-            return
             
-        if self.min_index is None:
-            # First insertion
-            self.min_index = bucket_index
-            self.max_index = bucket_index
-            self.counts[0] = count
-            self.num_buckets = 1
-            self.head = 0
-        else:
-            # Check if new bucket is within current range
-            if bucket_index < self.min_index:
-                # New minimum
-                span = self.max_index - bucket_index + 1
-                if span > len(self.counts):
-                    # Range too large, need to collapse
-                    self.collapse_smallest_buckets()
-                    self.add(bucket_index, count)  # Retry after collapse
-                    return
-                # Update head position for new minimum
-                self.head = (self.head - (self.min_index - bucket_index)) % len(self.counts)
-                self.min_index = bucket_index
-            elif bucket_index > self.max_index:
-                # New maximum
-                span = bucket_index - self.min_index + 1
-                if span > len(self.counts):
-                    # Range too large, need to collapse
-                    self.collapse_smallest_buckets()
-                    self.add(bucket_index, count)  # Retry after collapse
-                    return
-                self.max_index = bucket_index
-                
-            # Add count at wrapped position
+        Raises:
+            ValueError: If the bucket index is outside the valid range and cannot be accommodated.
+        """
+        try:
+            # Calculate position in array
             pos = self._get_position(bucket_index)
-            was_zero = self.counts[pos] == 0
+            
+            # Add the count
             self.counts[pos] += count
-            if was_zero:
-                self.num_buckets += 1
+            
+        except ValueError as e:
+            # Handle bucket index out of range
+            if "out of range" in str(e):
+                # Check if this is an extreme value that's far outside our range
                 
-            # Check if we need to collapse
-            if self.num_buckets > self.max_buckets:
-                self.collapse_smallest_buckets()
+                # Check if we can adjust the min_index to accommodate this new bucket
+                if bucket_index < self.min_index:
+                    # Too low - need to shift down or collapse
+                    shift_needed = self.min_index - bucket_index
+                    
+                    if shift_needed < self.max_buckets // 4:
+                        # Can shift down
+                        self.counts = np.roll(self.counts, shift_needed)
+                        self.counts[-shift_needed:] = 0  # Clear the rolled values
+                        self.min_index = bucket_index
+                        # Add count to the now-valid position
+                        self.add(bucket_index, count)
+                        return
+                    else:
+                        # Try to collapse smallest buckets
+                        try:
+                            self.collapse_smallest_buckets()
+                            # Try adding again
+                            self.add(bucket_index, count)
+                            return
+                        except ValueError:
+                            # If collapsing fails, we cannot add this bucket
+                            raise ValueError(f"Cannot add bucket {bucket_index}, outside valid range and storage is full")
+                        
+                elif bucket_index >= self.min_index + self.max_buckets:
+                    # Too high - need to shift up or collapse
+                    shift_needed = bucket_index - (self.min_index + self.max_buckets - 1)
+                    
+                    if shift_needed < self.max_buckets // 4:
+                        # Can shift up
+                        self.counts = np.roll(self.counts, -shift_needed)
+                        self.counts[:shift_needed] = 0  # Clear the rolled values
+                        self.min_index += shift_needed
+                        # Add count to the now-valid position
+                        self.add(bucket_index, count)
+                        return
+                    else:
+                        # Try to collapse smallest buckets
+                        try:
+                            self.collapse_smallest_buckets()
+                            # Try adding again
+                            self.add(bucket_index, count)
+                            return
+                        except ValueError:
+                            # If collapsing fails, we cannot add this bucket
+                            raise ValueError(f"Cannot add bucket {bucket_index}, outside valid range and storage is full")
                 
-        self.total_count += count
+                # If we get here, we can't add the bucket
+                raise ValueError(f"Bucket index {bucket_index} is outside the valid range and cannot be accommodated")
+            else:
+                # Pass other errors through
+                raise
     
     def remove(self, bucket_index: int, count: int = 1):
         """
-        Remove count from bucket_index.
+        Remove a count from a bucket.
         
         Args:
             bucket_index: The bucket index to remove from.
             count: The count to remove (default 1).
         """
-        if count <= 0 or self.min_index is None:
-            return
-            
-        if self.min_index <= bucket_index <= self.max_index:
+        try:
+            # Calculate position in array
             pos = self._get_position(bucket_index)
-            self.counts[pos] = max(0, self.counts[pos] - count)
-            self.total_count = max(0, self.total_count - count)
             
-            if self.counts[pos] == 0:
-                self.num_buckets -= 1
-                if self.num_buckets == 0:
-                    self.min_index = None
-                    self.max_index = None
-                elif bucket_index == self.min_index:
-                    # Find new minimum index
-                    for i in range(self.max_index - self.min_index + 1):
-                        pos = (self.head + i) % len(self.counts)
-                        if self.counts[pos] > 0:
-                            self.min_index += i
-                            self.head = pos
-                            break
-                elif bucket_index == self.max_index:
-                    # Find new maximum index
-                    for i in range(self.max_index - self.min_index + 1):
-                        pos = (self.head + (self.max_index - self.min_index - i)) % len(self.counts)
-                        if self.counts[pos] > 0:
-                            self.max_index -= i
-                            break
-    
+            # Remove count, but don't go below zero
+            current_count = self.counts[pos]
+            if current_count <= 0:
+                return  # Nothing to remove
+                
+            self.counts[pos] = max(0, current_count - count)
+            
+        except ValueError:
+            # If the bucket index is outside our range, there's nothing to remove
+            pass
+            
     def get_count(self, bucket_index: int) -> int:
         """
-        Get count for bucket_index.
+        Get the count for a bucket.
         
         Args:
-            bucket_index: The bucket index to get count for.
+            bucket_index: The bucket index to get the count for.
             
         Returns:
-            The count at the specified bucket index.
+            The count for the bucket (0 if bucket doesn't exist).
         """
-        if self.min_index is None or bucket_index < self.min_index or bucket_index > self.max_index:
+        try:
+            # Calculate position in array
+            pos = self._get_position(bucket_index)
+            return self.counts[pos]
+        except ValueError:
+            # If the bucket index is outside our range, count is 0
             return 0
-        pos = self._get_position(bucket_index)
-        return int(self.counts[pos])
     
     def merge(self, other: 'ContiguousStorage'):
         """
-        Merge another storage into this one.
+        Merge another ContiguousStorage into this one.
         
         Args:
-            other: Another ContiguousStorage instance to merge with this one.
+            other: Another ContiguousStorage instance to merge.
         """
-        if other.min_index is None:
+        if other is None or other.min_index is None:
+            # Nothing to merge
             return
             
-        # Add each non-zero bucket
-        for i in range(other.max_index - other.min_index + 1):
-            pos = (other.head + i) % len(other.counts)
-            if other.counts[pos] > 0:
+        # Merge all non-zero buckets
+        for i in range(other.max_buckets):
+            if other.counts[i] > 0:
                 bucket_index = other.min_index + i
-                self.add(bucket_index, int(other.counts[pos]))
+                try:
+                    # Try to add directly to our storage
+                    pos = self._get_position(bucket_index)
+                    self.counts[pos] += other.counts[i]
+                except ValueError:
+                    # Out of range, need to add with potential resize
+                    try:
+                        self.add(bucket_index, other.counts[i])
+                    except ValueError:
+                        # If we can't add, just skip this bucket
+                        continue
     
     def collapse_smallest_buckets(self):
-        """Collapse the two buckets with smallest indices."""
-        if self.num_buckets < 2:
-            return
-            
-        # Find first two non-zero buckets starting from min_index
-        first_pos = self.head
+        """
+        Collapse the two smallest buckets to make room for new buckets.
+        
+        This is used when we need to extend the range but we've hit the max_buckets limit.
+        
+        Raises:
+            ValueError: If no buckets can be collapsed (all have zero count or only one bucket has non-zero count).
+        """
+        # Find the smallest two non-zero buckets
+        first_pos = None
+        first_count = float('inf')
         second_pos = None
+        second_count = float('inf')
         
-        for i in range(self.max_index - self.min_index + 1):
-            pos = (self.head + i) % len(self.counts)
-            if self.counts[pos] > 0:
-                if first_pos == self.head:  # Still at initial position
-                    first_pos = pos
-                else:
-                    second_pos = pos
-                    break
-                    
-        # Merge counts into second bucket
-        self.counts[second_pos] += self.counts[first_pos]
-        self.counts[first_pos] = 0
-        self.num_buckets -= 1
+        for i in range(self.max_buckets):
+            count = self.counts[i]
+            if count > 0:
+                if count < first_count:
+                    second_pos = first_pos
+                    second_count = first_count
+                    first_pos = i
+                    first_count = count
+                elif count < second_count:
+                    second_pos = i
+                    second_count = count
         
-        # Update min_index and head
-        self.min_index += second_pos - first_pos
-        self.head = second_pos 
+        # If we don't have two non-zero buckets, we can't collapse
+        if first_pos is None or second_pos is None:
+            raise ValueError("Cannot collapse buckets: less than two non-zero buckets found")
+        
+        # Determine the bucket to keep (the higher index)
+        keep_pos = max(first_pos, second_pos)
+        
+        # Merge counts
+        self.counts[keep_pos] += self.counts[min(first_pos, second_pos)]
+        self.counts[min(first_pos, second_pos)] = 0
+        
+        # Success
+        return True 

@@ -1,6 +1,6 @@
 import pytest
 import numpy as np
-from GPUQuantile.ddsketch.core import DDSketch
+from GPUQuantile import DDSketch
 from GPUQuantile.ddsketch.storage.base import BucketManagementStrategy
 
 @pytest.fixture(params=[0.01, 0.001, 0.1])
@@ -21,7 +21,7 @@ def cont_neg(request):
 
 @pytest.fixture(params=[
     BucketManagementStrategy.FIXED,
-    BucketManagementStrategy.COLLAPSE
+    BucketManagementStrategy.DYNAMIC
 ])
 def bucket_strategy(request):
     return request.param

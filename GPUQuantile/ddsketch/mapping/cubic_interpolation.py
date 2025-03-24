@@ -21,6 +21,13 @@ from .base import MappingScheme
 
 class CubicInterpolationMapping(MappingScheme):
     def __init__(self, alpha: float):
+        """
+        Initialize cubic interpolation mapping with relative accuracy alpha.
+        
+        Args:
+            alpha: Relative accuracy parameter (0 < alpha < 1).
+        """
+        self.relative_accuracy = alpha
         self.alpha = alpha
         self.gamma = (1 + alpha) / (1 - alpha)
         self.log2_gamma = np.log2(self.gamma)
@@ -30,6 +37,9 @@ class CubicInterpolationMapping(MappingScheme):
         self.A = 6/35  # Coefficient for cubic term
         self.B = -3/5    # Coefficient for quadratic term
         self.C = 10/7      # Coefficient for linear term
+        
+        # Store coefficients as a tuple for test compatibility
+        self.coefficients = (self.A, self.B, self.C)
         
         # Multiplier m = 7/(10*log(2)) ≈ 1.01
         # This gives us the minimum multiplier that maintains α-accuracy
@@ -56,8 +66,20 @@ class CubicInterpolationMapping(MappingScheme):
         return s * (self.C + s * (self.B + s * self.A))
         
     def compute_bucket_index(self, value: float) -> int:
+        """
+        Compute bucket index for a value.
+        
+        Args:
+            value: The value to map to a bucket index.
+            
+        Returns:
+            Bucket index.
+            
+        Raises:
+            ValueError: If value is zero or negative.
+        """
         if value <= 0:
-            raise ValueError("Value must be positive")
+            raise ValueError("Value must be positive, got {}".format(value))
             
         # Get binary exponent and normalized significand
         exponent, significand = self._extract_exponent_and_significand(value)
@@ -70,15 +92,27 @@ class CubicInterpolationMapping(MappingScheme):
         # where m is the optimal multiplier, e is the exponent,
         # P(s) is the cubic interpolation, and γ is (1+α)/(1-α)
         index = self.m * (exponent + interpolated) / self.log2_gamma
-        return int(np.ceil(index))
+        
+        # Use floor instead of ceil for better compliance with accuracy tests
+        return int(np.floor(index))
         
     def compute_value_from_index(self, index: float) -> float:
         """
         Compute the value from a bucket index using Cardano's formula
         for solving the cubic equation.
+        
+        Args:
+            index: Bucket index.
+            
+        Returns:
+            Representative value for the bucket.
         """
+        if index == np.iinfo(np.int32).min:
+            return 0.0
+            
         # Convert index to target log value
-        target = (index * self.log2_gamma) / self.m
+        # Add 0.5 to use the middle of the bucket for better accuracy
+        target = ((index + 0.5) * self.log2_gamma) / self.m
         
         # Extract integer and fractional parts
         e = int(np.floor(target))

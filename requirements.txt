@@ -2,3 +2,5 @@ numpy
 pandas
 pytest
 coverage
+scipy
+matplotlib
