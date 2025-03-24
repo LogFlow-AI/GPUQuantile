@@ -1,0 +1,8 @@
+image: gitpod/workspace-full
+
+tasks:
+  - name: Setup pyenv-virtualenv
+    init: |
+      git clone https://github.com/pyenv/pyenv-virtualenv.git "$(pyenv root)/plugins/pyenv-virtualenv"
+      cd "$(pyenv root)/plugins/pyenv-virtualenv"
+      make install 
