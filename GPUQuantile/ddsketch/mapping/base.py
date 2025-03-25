@@ -2,6 +2,7 @@
 
 from abc import ABC, abstractmethod
 
+
 class MappingScheme(ABC):
     """Abstract base class for different mapping schemes."""
     

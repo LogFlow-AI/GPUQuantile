@@ -3,6 +3,7 @@
 from abc import ABC, abstractmethod
 from enum import Enum, auto
 import numpy as np
+import warnings
 
 class BucketManagementStrategy(Enum):
     """Strategy for managing the number of buckets in the sketch."""
@@ -24,6 +25,13 @@ class Storage(ABC):
             strategy: Bucket management strategy (default FIXED).
         """
         self.strategy = strategy
+        if strategy == BucketManagementStrategy.UNLIMITED and max_buckets != 2048:
+            warnings.warn(
+                f"max_buckets={max_buckets} was provided but will be ignored because "
+                "strategy=BucketManagementStrategy.UNLIMITED was selected. The storage "
+                "will have no bucket limit.",
+                UserWarning
+            )
         self.max_buckets = max_buckets if strategy != BucketManagementStrategy.UNLIMITED else -1
         self.total_count = 0  # Used for dynamic strategy
         self.last_order_of_magnitude = 0  # Track last order of magnitude for dynamic updates

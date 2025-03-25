@@ -2,6 +2,7 @@ import pytest
 from GPUQuantile.ddsketch.storage.base import BucketManagementStrategy
 from GPUQuantile.ddsketch.storage.contiguous import ContiguousStorage
 from GPUQuantile.ddsketch.storage.sparse import SparseStorage
+import warnings
 
 @pytest.fixture(params=[ContiguousStorage, SparseStorage])
 def storage_class(request):
@@ -20,19 +21,25 @@ def bucket_strategy(request):
     return request.param
 
 def test_storage_initialization(storage_class, max_buckets, bucket_strategy):
-    if storage_class == ContiguousStorage and bucket_strategy != BucketManagementStrategy.FIXED:
-        pytest.skip("ContiguousStorage only supports FIXED strategy")
+    if storage_class == ContiguousStorage:
+        if bucket_strategy != BucketManagementStrategy.FIXED:
+            pytest.skip("ContiguousStorage only supports FIXED strategy")
+        storage = storage_class(max_buckets)
+    else:
+        storage = storage_class(max_buckets, bucket_strategy)
     
-    storage = storage_class(max_buckets, bucket_strategy)
-    assert storage.max_buckets == max_buckets
+    expected_max_buckets = -1 if bucket_strategy == BucketManagementStrategy.UNLIMITED else max_buckets
+    assert storage.max_buckets == expected_max_buckets
     if hasattr(storage, 'strategy'):
         assert storage.strategy == bucket_strategy
 
 def test_add_and_get_count(storage_class, max_buckets, bucket_strategy):
-    if storage_class == ContiguousStorage and bucket_strategy != BucketManagementStrategy.FIXED:
-        pytest.skip("ContiguousStorage only supports FIXED strategy")
-    
-    storage = storage_class(max_buckets, bucket_strategy)
+    if storage_class == ContiguousStorage:
+        if bucket_strategy != BucketManagementStrategy.FIXED:
+            pytest.skip("ContiguousStorage only supports FIXED strategy")
+        storage = storage_class(max_buckets)
+    else:
+        storage = storage_class(max_buckets, bucket_strategy)
     
     # Add counts to some buckets
     test_buckets = {0: 1, 5: 3, 10: 2}
@@ -48,10 +55,12 @@ def test_add_and_get_count(storage_class, max_buckets, bucket_strategy):
     assert storage.get_count(999) == 0
 
 def test_remove(storage_class, max_buckets, bucket_strategy):
-    if storage_class == ContiguousStorage and bucket_strategy != BucketManagementStrategy.FIXED:
-        pytest.skip("ContiguousStorage only supports FIXED strategy")
-    
-    storage = storage_class(max_buckets, bucket_strategy)
+    if storage_class == ContiguousStorage:
+        if bucket_strategy != BucketManagementStrategy.FIXED:
+            pytest.skip("ContiguousStorage only supports FIXED strategy")
+        storage = storage_class(max_buckets)
+    else:
+        storage = storage_class(max_buckets, bucket_strategy)
     
     # Add and remove counts
     bucket_idx = 5
@@ -66,11 +75,14 @@ def test_remove(storage_class, max_buckets, bucket_strategy):
     assert storage.get_count(999) == 0
 
 def test_merge(storage_class, max_buckets, bucket_strategy):
-    if storage_class == ContiguousStorage and bucket_strategy != BucketManagementStrategy.FIXED:
-        pytest.skip("ContiguousStorage only supports FIXED strategy")
-    
-    storage1 = storage_class(max_buckets, bucket_strategy)
-    storage2 = storage_class(max_buckets, bucket_strategy)
+    if storage_class == ContiguousStorage:
+        if bucket_strategy != BucketManagementStrategy.FIXED:
+            pytest.skip("ContiguousStorage only supports FIXED strategy")
+        storage1 = storage_class(max_buckets)
+        storage2 = storage_class(max_buckets)
+    else:
+        storage1 = storage_class(max_buckets, bucket_strategy)
+        storage2 = storage_class(max_buckets, bucket_strategy)
     
     # Add counts to both storages
     storage1.add(0)
@@ -86,10 +98,12 @@ def test_merge(storage_class, max_buckets, bucket_strategy):
     assert storage1.get_count(10) == 1
 
 def test_bucket_limit(storage_class, max_buckets, bucket_strategy):
-    if storage_class == ContiguousStorage and bucket_strategy != BucketManagementStrategy.FIXED:
-        pytest.skip("ContiguousStorage only supports FIXED strategy")
-    
-    storage = storage_class(max_buckets, bucket_strategy)
+    if storage_class == ContiguousStorage:
+        if bucket_strategy != BucketManagementStrategy.FIXED:
+            pytest.skip("ContiguousStorage only supports FIXED strategy")
+        storage = storage_class(max_buckets)
+    else:
+        storage = storage_class(max_buckets, bucket_strategy)
     
     # Add more buckets than max_buckets
     for i in range(max_buckets + 10):
@@ -145,10 +159,12 @@ def test_sparse_storage_specific():
     assert storage.get_count(last_bucket) == initial_count + 1
 
 def test_storage_clear(storage_class, max_buckets, bucket_strategy):
-    if storage_class == ContiguousStorage and bucket_strategy != BucketManagementStrategy.FIXED:
-        pytest.skip("ContiguousStorage only supports FIXED strategy")
-    
-    storage = storage_class(max_buckets, bucket_strategy)
+    if storage_class == ContiguousStorage:
+        if bucket_strategy != BucketManagementStrategy.FIXED:
+            pytest.skip("ContiguousStorage only supports FIXED strategy")
+        storage = storage_class(max_buckets)
+    else:
+        storage = storage_class(max_buckets, bucket_strategy)
     
     # Add some counts
     storage.add(0)
@@ -165,10 +181,12 @@ def test_storage_clear(storage_class, max_buckets, bucket_strategy):
         assert storage.get_count(10) == 0
 
 def test_negative_buckets(storage_class, max_buckets, bucket_strategy):
-    if storage_class == ContiguousStorage and bucket_strategy != BucketManagementStrategy.FIXED:
-        pytest.skip("ContiguousStorage only supports FIXED strategy")
-    
-    storage = storage_class(max_buckets, bucket_strategy)
+    if storage_class == ContiguousStorage:
+        if bucket_strategy != BucketManagementStrategy.FIXED:
+            pytest.skip("ContiguousStorage only supports FIXED strategy")
+        storage = storage_class(max_buckets)
+    else:
+        storage = storage_class(max_buckets, bucket_strategy)
     
     # Test adding negative bucket indices
     if storage_class == SparseStorage:
@@ -180,4 +198,14 @@ def test_negative_buckets(storage_class, max_buckets, bucket_strategy):
         # ContiguousStorage should handle negative indices within its range
         min_bucket = -(max_buckets // 2)
         storage.add(min_bucket)
-        assert storage.get_count(min_bucket) == 1 
+        assert storage.get_count(min_bucket) == 1
+
+def test_unlimited_strategy_warning():
+    """Test that a warning is raised when max_buckets is provided with UNLIMITED strategy."""
+    with pytest.warns(UserWarning, match="max_buckets=100 was provided but will be ignored"):
+        SparseStorage(max_buckets=100, strategy=BucketManagementStrategy.UNLIMITED)
+    
+    # No warning should be raised when using default max_buckets
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")  # Turn warnings into errors
+        SparseStorage(strategy=BucketManagementStrategy.UNLIMITED)  # Just create without assigning 

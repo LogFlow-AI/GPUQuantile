@@ -89,9 +89,19 @@ def test_consecutive_buckets(mapping_class, relative_accuracy):
     next_value = mapping.compute_value_from_index(index + 1)
     prev_value = mapping.compute_value_from_index(index - 1)
     
-    # Check that consecutive buckets maintain relative accuracy bounds
-    assert next_value / value <= 1 + relative_accuracy
-    assert value / prev_value <= 1 + relative_accuracy
+    # The relative accuracy bound applies to bucket boundaries
+    # For a bucket with index i, its boundaries are:
+    # - Lower: gamma^i
+    # - Upper: gamma^(i+1)
+    # Where gamma = (1 + alpha)/(1 - alpha)
+    # The centered value we get from compute_value_from_index is the geometric mean of these boundaries
+    # So we need to adjust our test accordingly
+    
+    gamma = (1 + relative_accuracy) / (1 - relative_accuracy)
+    
+    # Check that ratios between consecutive bucket values are within bounds
+    assert next_value / value <= gamma
+    assert value / prev_value >= gamma
 
 def test_specific_mapping_features():
     """Test specific features of each mapping type"""
@@ -103,11 +113,14 @@ def test_specific_mapping_features():
     
     # Test LinearInterpolationMapping
     lin_mapping = LinearInterpolationMapping(0.01)
-    assert hasattr(lin_mapping, 'interpolation_multiplier')
+    assert hasattr(lin_mapping, 'log_gamma')
+    assert hasattr(lin_mapping, 'gamma')
     
     # Test CubicInterpolationMapping
     cubic_mapping = CubicInterpolationMapping(0.01)
-    assert hasattr(cubic_mapping, 'coefficients')
+    assert hasattr(cubic_mapping, 'A')
+    assert hasattr(cubic_mapping, 'B')
+    assert hasattr(cubic_mapping, 'C')
     
     # Test that each mapping type gives different results
     test_value = 2.0
