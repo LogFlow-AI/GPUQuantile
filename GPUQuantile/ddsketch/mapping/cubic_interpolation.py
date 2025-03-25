@@ -21,12 +21,7 @@ from .base import MappingScheme
 
 class CubicInterpolationMapping(MappingScheme):
     def __init__(self, relative_accuracy: float):
-        # Correcting factor from Datadog's implementation
-        correcting_factor = 1.0 / (10.0/7.0 * np.log(2))  # 1/(C * log(2))
-        
-        # Apply correcting factor to gamma calculation
-        gamma = (1 + relative_accuracy) / (1 - relative_accuracy)
-        self.gamma = np.power(gamma, correcting_factor)
+        self.gamma = (1 + relative_accuracy) / (1 - relative_accuracy)
         self.relative_accuracy = relative_accuracy
         self.log2_gamma = np.log2(self.gamma)
         
@@ -39,7 +34,7 @@ class CubicInterpolationMapping(MappingScheme):
         # Multiplier m = 7/(10*log(2)) ≈ 1.01
         # This gives us the minimum multiplier that maintains relative accuracy guarantee
         # Divide by C as per Datadog's implementation
-        self.m = (7.0 / (10.0 * np.log(2))) / self.C
+        self.m = 1/ (self.C * np.log(2))
         
     def _extract_exponent_and_significand(self, value: float) -> tuple[int, float]:
         """
