@@ -86,13 +86,18 @@ class SparseStorage(Storage):
             self.add(idx, count)
             
     def collapse_smallest_buckets(self):
-        """Collapse the two buckets with smallest indices."""
+        """Collapse the two buckets with smallest counts to maintain max bucket limit."""
         if len(self.counts) < 2:
             return
             
-        # Find two smallest indices
-        indices = sorted(self.counts.keys())
-        i0, i1 = indices[0], indices[1]
+        # Find two buckets with smallest counts
+        sorted_buckets = sorted(self.counts.items(), key=lambda x: (x[1], x[0]))
+        i0, count0 = sorted_buckets[0]
+        i1, count1 = sorted_buckets[1]
+        
+        # Ensure i0 is the smaller index for consistency
+        if i1 < i0:
+            i0, i1 = i1, i0
         
         # Merge buckets
         self.counts[i1] += self.counts[i0]

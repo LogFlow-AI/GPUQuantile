@@ -141,7 +141,7 @@ class DDSketch:
         if self.count == 0:
             raise ValueError("Cannot compute quantile of empty sketch")
             
-        rank = q * self.count
+        rank = q * (self.count - 1)
         
         if self.cont_neg:
             neg_count = sum(self.negative_store.counts.values())

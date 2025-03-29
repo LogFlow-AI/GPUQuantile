@@ -24,8 +24,8 @@ class LinearInterpolationMapping(MappingScheme):
             where normalized_fraction is in [1, 2)
         """
         # Use numpy's frexp for better numerical precision
-        mantissa, exponent = np.frexp(value)
-        exponent = exponent - 1  # Convert to floor(log2)
+        mantissa, exponent = np.frexp(value) # mantissa * 2^exponent = value
+        exponent -= 1  # Convert to floor(log2)
         normalized_fraction = mantissa * 2  # Scale to [1, 2)
         return exponent, normalized_fraction
         

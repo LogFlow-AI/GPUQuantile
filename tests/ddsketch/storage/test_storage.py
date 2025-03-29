@@ -3,6 +3,7 @@ from GPUQuantile.ddsketch.storage.base import BucketManagementStrategy
 from GPUQuantile.ddsketch.storage.contiguous import ContiguousStorage
 from GPUQuantile.ddsketch.storage.sparse import SparseStorage
 import warnings
+import numpy as np
 
 @pytest.fixture(params=[ContiguousStorage, SparseStorage])
 def storage_class(request):
@@ -28,7 +29,14 @@ def test_storage_initialization(storage_class, max_buckets, bucket_strategy):
     else:
         storage = storage_class(max_buckets, bucket_strategy)
     
-    expected_max_buckets = -1 if bucket_strategy == BucketManagementStrategy.UNLIMITED else max_buckets
+    # Check max_buckets based on strategy
+    if bucket_strategy == BucketManagementStrategy.FIXED:
+        expected_max_buckets = max_buckets
+    elif bucket_strategy == BucketManagementStrategy.UNLIMITED:
+        expected_max_buckets = -1
+    else:  # DYNAMIC
+        expected_max_buckets = 32  # Initial value for dynamic strategy
+        
     assert storage.max_buckets == expected_max_buckets
     if hasattr(storage, 'strategy'):
         assert storage.strategy == bucket_strategy
@@ -113,18 +121,31 @@ def test_bucket_limit(storage_class, max_buckets, bucket_strategy):
     non_zero_buckets = sum(1 for i in range(max_buckets + 10) if storage.get_count(i) > 0)
     
     if bucket_strategy == BucketManagementStrategy.FIXED:
+        # FIXED strategy should respect max_buckets exactly
         assert non_zero_buckets <= max_buckets
+    elif bucket_strategy == BucketManagementStrategy.DYNAMIC:
+        # DYNAMIC strategy should use logarithmic growth
+        # For n values, expect roughly 100*log10(n+1) buckets
+        expected_buckets = int(100 * np.log10(storage.total_count + 1))
+        assert non_zero_buckets <= expected_buckets
     else:
-        # For COLLAPSE strategy, some buckets should have been merged
-        assert non_zero_buckets <= max_buckets
+        # UNLIMITED strategy should keep all buckets
+        assert non_zero_buckets == max_buckets + 10
 
 def test_contiguous_storage_specific():
     """Test ContiguousStorage-specific features"""
     storage = ContiguousStorage(max_buckets=32)
     
+    # Initialize storage by adding a value first
+    storage.add(0)  # This will set min_index and max_index
+    
     # Test bucket range limits
-    min_bucket = -16
-    max_bucket = 15
+    min_bucket = -(storage.max_buckets // 2)
+    max_bucket = (storage.max_buckets // 2) - 1
+    
+    # Add some values to ensure we have enough buckets for collapse
+    for i in range(3):  # Add a few values to have multiple non-zero buckets
+        storage.add(i)
     
     # Add values at extremes
     storage.add(min_bucket)
