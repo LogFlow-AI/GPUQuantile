@@ -9,16 +9,18 @@ in service and system logs. It implements multiple sketching algorithms optimize
 - Distributed computation support through mergeable sketches
 - Accuracy guarantees for quantile approximation
 
-The package includes two main implementations:
+The package includes three main implementations:
 
 1. DDSketch: A deterministic algorithm with relative error guarantees
 2. MomentSketch: A moment-based algorithm using maximum entropy optimization
+3. HDRHistogram: A high dynamic range histogram for tracking values across wide ranges
 
-Both implementations are designed to handle high-throughput data streams and provide
+All implementations are designed to handle high-throughput data streams and provide
 accurate quantile estimates with minimal memory overhead.
 """
 from GPUQuantile.ddsketch.core import DDSketch
 from GPUQuantile.momentsketch.core import MomentSketch
+from GPUQuantile.hdrhistogram.core import HDRHistogram
 
 # Also import the main components for direct access
 from GPUQuantile.ddsketch import (
@@ -30,10 +32,11 @@ from GPUQuantile.ddsketch import (
     BucketManagementStrategy
 )
 
-__version__ = "0.0.3"
+__version__ = "0.0.4"
 __all__ = [
     "DDSketch",
     "MomentSketch",
+    "HDRHistogram",
     "LogarithmicMapping",
     "LinearInterpolationMapping",
     "CubicInterpolationMapping",

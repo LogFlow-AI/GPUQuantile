@@ -1,6 +1,6 @@
 import pytest
 import numpy as np
-from GPUQuantile import DDSketch
+from GPUQuantile.ddsketch.core import DDSketch
 from GPUQuantile.ddsketch.storage.base import BucketManagementStrategy
 
 @pytest.fixture(params=[0.01, 0.001, 0.1])
