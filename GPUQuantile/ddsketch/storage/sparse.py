@@ -46,22 +46,27 @@ class SparseStorage(Storage):
             len(self.counts) > self.max_buckets):
             self.collapse_smallest_buckets()
     
-    def remove(self, bucket_index: int, count: int = 1):
+    def remove(self, bucket_index: int, count: int = 1) -> bool:
         """
         Remove count from bucket_index.
         
         Args:
             bucket_index: The bucket index to remove from.
             count: The count to remove (default 1).
+            
+        Returns:
+            bool: True if any value was actually removed, False otherwise.
         """
         if count <= 0 or bucket_index not in self.counts:
-            return
+            return False
             
         self.counts[bucket_index] = max(0, self.counts[bucket_index] - count)
         self.total_count = max(0, self.total_count - count)
         
         if self.counts[bucket_index] == 0:
             del self.counts[bucket_index]
+            
+        return True
     
     def get_count(self, bucket_index: int) -> int:
         """

@@ -26,6 +26,7 @@ class ContiguousStorage(Storage):
         if max_buckets <= 0:
             raise ValueError("max_buckets must be positive for ContiguousStorage")
         super().__init__(max_buckets, BucketManagementStrategy.FIXED)
+        self.total_count = 0
         self.counts = np.zeros(max_buckets, dtype=np.int64)
         self.min_index = None  # Minimum bucket index seen
         self.max_index = None  # Maximum bucket index seen
@@ -127,20 +128,27 @@ class ContiguousStorage(Storage):
                     
         self.total_count += count
     
-    def remove(self, bucket_index: int, count: int = 1):
+    def remove(self, bucket_index: int, count: int = 1) -> bool:
         """
         Remove count from bucket_index.
         
         Args:
             bucket_index: The bucket index to remove from.
             count: The count to remove (default 1).
+            
+        Returns:
+            bool: True if any value was actually removed, False otherwise.
         """
         if count <= 0 or self.min_index is None:
-            return
+            return False
             
         if self.min_index <= bucket_index <= self.max_index:
             pos = self._get_position(bucket_index)
             old_count = self.counts[pos]
+            
+            if old_count == 0:
+                return False
+                
             self.counts[pos] = max(0, old_count - count)
             self.total_count = max(0, self.total_count - count)
             
@@ -164,9 +172,11 @@ class ContiguousStorage(Storage):
                         if self.counts[pos] > 0:
                             self.max_index -= i
                             break
+            return True
         else:
             warnings.warn("Removing count from non-existent bucket. "
                               "Bucket index is out of range.", UserWarning)
+            return False
     
     def get_count(self, bucket_index: int) -> int:
         """

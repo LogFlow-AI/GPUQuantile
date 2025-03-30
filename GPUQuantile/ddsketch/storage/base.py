@@ -51,8 +51,17 @@ class Storage(ABC):
         pass
     
     @abstractmethod
-    def remove(self, bucket_index: int, count: int = 1):
-        """Remove count from bucket_index."""
+    def remove(self, bucket_index: int, count: int = 1) -> bool:
+        """
+        Remove count from bucket_index.
+        
+        Args:
+            bucket_index: The bucket index to remove from.
+            count: The count to remove (default 1).
+            
+        Returns:
+            bool: True if any value was actually removed, False otherwise.
+        """
         pass
     
     @abstractmethod

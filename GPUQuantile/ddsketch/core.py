@@ -111,17 +111,21 @@ class DDSketch:
         if self.count == 0:
             return
             
+        deleted = False
         if value == 0 and self.zero_count > 0:
             self.zero_count -= 1
+            deleted = True
         elif value > 0:
             bucket_idx = self.mapping.compute_bucket_index(value)
-            self.positive_store.remove(bucket_idx)
+            deleted = self.positive_store.remove(bucket_idx)
         elif value < 0 and self.cont_neg:
             bucket_idx = self.mapping.compute_bucket_index(-value)
-            self.negative_store.remove(bucket_idx)
+            deleted = self.negative_store.remove(bucket_idx)
         elif value < 0:
             raise ValueError("Negative values not supported when cont_neg is False")
-        self.count = max(0, self.count - 1)
+            
+        if deleted:
+            self.count -= 1
     
     def quantile(self, q: float) -> float:
         """
@@ -144,14 +148,16 @@ class DDSketch:
         rank = q * (self.count - 1)
         
         if self.cont_neg:
-            neg_count = sum(self.negative_store.counts.values())
+            neg_count = self.negative_store.total_count
             if rank < neg_count:
                 # Handle negative values
                 curr_count = 0
-                for idx in sorted(self.negative_store.counts.keys(), reverse=True):
-                    curr_count += self.negative_store.get_count(idx)
-                    if curr_count > rank:
-                        return -self.mapping.compute_value_from_index(idx)
+                if self.negative_store.min_index is not None:
+                    for idx in range(self.negative_store.max_index, self.negative_store.min_index - 1, -1):
+                        bucket_count = self.negative_store.get_count(idx)
+                        curr_count += bucket_count
+                        if curr_count > rank:
+                            return -self.mapping.compute_value_from_index(idx)
             rank -= neg_count
             
         if rank < self.zero_count:
@@ -159,10 +165,12 @@ class DDSketch:
         rank -= self.zero_count
         
         curr_count = 0
-        for idx in sorted(self.positive_store.counts.keys()):
-            curr_count += self.positive_store.get_count(idx)
-            if curr_count > rank:
-                return self.mapping.compute_value_from_index(idx)
+        if self.positive_store.min_index is not None:
+            for idx in range(self.positive_store.min_index, self.positive_store.max_index + 1):
+                bucket_count = self.positive_store.get_count(idx)
+                curr_count += bucket_count
+                if curr_count > rank:
+                    return self.mapping.compute_value_from_index(idx)
                 
         return float('inf')
     
