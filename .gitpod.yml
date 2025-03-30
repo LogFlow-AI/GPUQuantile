@@ -14,5 +14,5 @@ tasks:
     
     command: |
       # Commands that should run every time
-      pyenv install -s 3.13.0  # -s flag skips if already installed
+      pyenv install 3.13.0  # -s flag skips if already installed
       make install

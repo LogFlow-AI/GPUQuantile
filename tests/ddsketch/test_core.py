@@ -160,13 +160,7 @@ def test_different_storage_types():
         # Verify median with a slightly higher tolerance
         assert abs(sketch.quantile(0.5) - 3.0) <= 3.0 * 0.02  # Double the relative accuracy for tests
 
-def test_extreme_values():
-    # Create sketch using SparseStorage for extreme values test since it can handle large range
-    from GPUQuantile.ddsketch.storage.sparse import SparseStorage
-    
-    # Create custom mappings and storage
-    positive_store = SparseStorage()
-    negative_store = SparseStorage()
+def test_extreme_values():    
     sketch = DDSketch(relative_accuracy=0.01)
     
     # Test very large and very small positive values

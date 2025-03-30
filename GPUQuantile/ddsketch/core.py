@@ -7,7 +7,6 @@ from .mapping.cubic_interpolation import CubicInterpolationMapping
 from .storage.base import BucketManagementStrategy
 from .storage.contiguous import ContiguousStorage
 from .storage.sparse import SparseStorage
-import numpy as np
 
 class DDSketch:
     """
@@ -69,9 +68,6 @@ class DDSketch:
             self.mapping = CubicInterpolationMapping(relative_accuracy)
         else:
             raise ValueError(f"Unknown mapping type: {mapping_type}")
-            
-        # Adjust max_buckets if handling negative values
-        store_max_buckets = max_buckets // 2 if cont_neg else max_buckets
         
         # Choose storage type based on strategy
         if bucket_strategy == BucketManagementStrategy.FIXED:
