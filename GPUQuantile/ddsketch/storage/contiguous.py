@@ -66,8 +66,8 @@ class ContiguousStorage(Storage):
             self.num_buckets = 1
             self.arr_index_of_min_bucket = 0
         else:
-            new_range = self.max_index - bucket_index + 1
             if bucket_index < self.min_index:
+                new_range = self.max_index - bucket_index + 1
                 # Handle insertion below current minimum
                 if new_range > len(self.counts):
                     # Range too large, collapse into min bucket
@@ -84,6 +84,7 @@ class ContiguousStorage(Storage):
                     self.num_buckets += 1
                     
             elif bucket_index > self.max_index:
+                new_range = bucket_index - self.min_index + 1
                 if new_range > len(self.counts):
                     # Handle insertion above current maximum
                     buckets_to_collapse = bucket_index - self.max_index
@@ -178,11 +179,9 @@ class ContiguousStorage(Storage):
             The count at the specified bucket index.
         """
         if self.min_index is None or bucket_index < self.min_index or bucket_index > self.max_index:
+            warnings.warn("Bucket index is out of range. Returning 0.", UserWarning)
             return 0
         pos = self._get_position(bucket_index)
-        if bucket_index == 0:
-            print(pos)
-            print(self.counts)
         return int(self.counts[pos])
     
     def merge(self, other: 'ContiguousStorage'):
@@ -199,28 +198,6 @@ class ContiguousStorage(Storage):
         for i in range(other.max_index - other.min_index + 1):
             pos = (other.arr_index_of_min_bucket + i) % len(other.counts)
             if other.counts[pos] > 0:
-                self.add(other.min_index + i, int(other.counts[pos]))
-
-    def collapse_smallest_buckets(self):
-        """
-        Collapse the two smallest index buckets to maintain max bucket limit.
-        For ContiguousStorage, this means combining the counts of the two lowest
-        buckets into the higher index bucket and adjusting the min_index.
-        """
-        if self.min_index is None or self.max_index is None or self.max_index - self.min_index < 1:
-            return
-
-        # Get the two smallest buckets
-        min_pos = self._get_position(self.min_index)
-        next_pos = self._get_position(self.min_index + 1)
-        
-        # Combine counts into the higher bucket
-        self.counts[next_pos] += self.counts[min_pos]
-        self.counts[min_pos] = 0
-        
-        # Update tracking variables
-        self.min_index += 1
-        self.arr_index_of_min_bucket = next_pos
-        self.num_buckets -= 1
-        self.collapse_count += 1
+                bucket_index = other.min_index + i
+                self.add(bucket_index, int(other.counts[pos]))
     
