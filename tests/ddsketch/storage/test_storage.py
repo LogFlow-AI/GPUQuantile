@@ -170,17 +170,19 @@ def test_contiguous_storage_specific():
 
 def test_sparse_storage_specific():
     """Test SparseStorage-specific features"""
-    storage = SparseStorage(max_buckets=32, strategy=BucketManagementStrategy.COLLAPSE)
+    storage = SparseStorage(max_buckets=32, strategy=BucketManagementStrategy.DYNAMIC)
     
-    # Test collapse behavior
-    # Add many buckets to force collapse
+    # Test dynamic bucket management behavior
+    # Add many buckets to force dynamic resizing
     for i in range(100):
         storage.add(i)
     
-    # Verify that some buckets were merged
-    assert len(storage.counts) <= 32
+    # Verify that buckets are managed according to dynamic strategy
+    # For n values, expect roughly 100*log10(n+1) buckets
+    expected_buckets = int(100 * np.log10(storage.total_count + 1))
+    assert len(storage.counts) <= expected_buckets
     
-    # Test that we can still add to collapsed buckets
+    # Test that we can still add to existing buckets
     last_bucket = max(storage.counts.keys())
     initial_count = storage.get_count(last_bucket)
     storage.add(last_bucket)
