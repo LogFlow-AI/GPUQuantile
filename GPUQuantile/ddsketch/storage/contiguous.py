@@ -1,18 +1,19 @@
 """Contiguous array storage implementation for DDSketch using circular buffer."""
 
 import numpy as np
+import warnings
 from .base import Storage, BucketManagementStrategy
 
 class ContiguousStorage(Storage):
     """
     Contiguous array storage for DDSketch using a circular buffer.
     
-    Uses wrap-around indexing to avoid expensive array shifts. Array positions
-    are determined by offset from the minimum bucket index modulo array size.
-    This is efficient because bucket indices form consecutive integers based
-    on the mapping schemes:
-    - For logarithmic: ceil(log(value) / log(gamma))
-    - For interpolation: ceil(log2(value) / log2(gamma) * multiplier)
+    Uses a bucket mapping scheme where:
+    bucket_array_index = (bucket_index - min_bucket_index + arr_index_of_min_bucket) % num_buckets
+    
+    Implements collapsing strategy where:
+    - If inserting below min: collapse if range too large, otherwise adjust min
+    - If inserting above max: collapse lowest buckets to make room
     """
     
     def __init__(self, max_buckets: int = 2048):
@@ -29,28 +30,26 @@ class ContiguousStorage(Storage):
         self.min_index = None  # Minimum bucket index seen
         self.max_index = None  # Maximum bucket index seen
         self.num_buckets = 0   # Number of non-zero buckets
-        self.head = 0          # Array position corresponding to min_index
-        self.offset = 0        # Offset from the physical array position to logical position
+        self.arr_index_of_min_bucket = 0  # Array index where min bucket is stored
+        self.collapse_count = 0  # Number of times buckets have been collapsed
     
     def _get_position(self, bucket_index: int) -> int:
         """
-        Get array position for bucket index using wrap-around.
+        Get array position for bucket index using new mapping formula.
         
         Args:
             bucket_index: The bucket index to map to array position.
             
         Returns:
-            The array position using circular buffer indexing.
+            The array position in the circular buffer.
         """
         if self.min_index is None:
             return 0
-        # Add offset to the physical position calculation
-        offset = bucket_index - self.min_index
-        return (self.head + offset + self.offset) % len(self.counts)
+        return (bucket_index - self.min_index + self.arr_index_of_min_bucket) % len(self.counts)
     
     def add(self, bucket_index: int, count: int = 1):
         """
-        Add count to bucket_index.
+        Add count to bucket_index using new collapsing strategy.
         
         Args:
             bucket_index: The bucket index to add to.
@@ -65,79 +64,67 @@ class ContiguousStorage(Storage):
             self.max_index = bucket_index
             self.counts[0] = count
             self.num_buckets = 1
-            self.head = 0
+            self.arr_index_of_min_bucket = 0
         else:
-            # Check if new bucket extends the range
-            if bucket_index < self.min_index or bucket_index > self.max_index:
-                # Calculate new range
-                new_min = min(self.min_index, bucket_index)
-                new_max = max(self.max_index, bucket_index)
-                new_span = new_max - new_min + 1
+            new_range = self.max_index - bucket_index + 1
+            if bucket_index < self.min_index:
+                # Handle insertion below current minimum
+                if new_range > len(self.counts):
+                    # Range too large, collapse into min bucket
+                    pos = self._get_position(self.min_index)
+                    self.counts[pos] += count
+                    self.collapse_count += 1
+                else:
+                    # Update min and place value
+                    shift = self.min_index - bucket_index
+                    self.min_index = bucket_index
+                    self.arr_index_of_min_bucket = self.arr_index_of_min_bucket - shift
+                    pos = self._get_position(bucket_index)
+                    self.counts[pos] = count
+                    self.num_buckets += 1
+                    
+            elif bucket_index > self.max_index:
+                if new_range > len(self.counts):
+                    # Handle insertion above current maximum
+                    buckets_to_collapse = bucket_index - self.max_index
+                    # Collapse lowest buckets
+                    collapse_sum = 0
+                    for i in range(buckets_to_collapse):
+                        if i >= self.max_index - self.min_index + 1:
+                            warnings.warn("Collapsing all buckets in the sketch. "
+                                          "Range is too large to be contained by the buckets allocated, "
+                                          "and you should increase max_buckets.", UserWarning)
+                            break
+                        pos = i + self.arr_index_of_min_bucket
+                        collapse_sum += self.counts[pos]
+                        self.counts[pos] = 0
+                        
+                    # Add collapsed values to new min bucket
+                    new_min = self.min_index + buckets_to_collapse
+                    new_min_pos = self._get_position(new_min)
+                    self.counts[new_min_pos] += collapse_sum
+                    
+                    # Update tracking variables
+                    self.min_index = new_min
+                    self.arr_index_of_min_bucket = new_min_pos
+                    self.collapse_count += buckets_to_collapse
                 
-                # First center the data around the new range
-                self._center_data(new_min, new_max)
-                
-                # Then collapse if needed to fit the new range
-                if new_span > len(self.counts):
-                    self._collapse_to_fit(new_min, new_max)
-            
-            # Add the count
-            pos = self._get_position(bucket_index)
-            was_zero = self.counts[pos] == 0
-            self.counts[pos] += count
-            if was_zero:
-                self.num_buckets += 1
-                
-        # Check if we need to collapse due to too many buckets
-        if self.num_buckets > self.max_buckets:
-            self.collapse_smallest_buckets()
-                
+                # Place new value
+                self.max_index = bucket_index
+                pos = self._get_position(bucket_index)
+                was_zero = self.counts[pos] == 0
+                self.counts[pos] += count
+                if was_zero:
+                    self.num_buckets += 1
+            else:
+                # Normal insertion within current range
+                pos = self._get_position(bucket_index)
+                was_zero = self.counts[pos] == 0
+                self.counts[pos] += count
+                if was_zero:
+                    self.num_buckets += 1
+                    
         self.total_count += count
-    
-    def _center_data(self, new_min: int, new_max: int):
-        """Center the data in the circular buffer around the new range."""
-        # Calculate the center point of the new range
-        center = (new_min + new_max) // 2
-        
-        # Calculate how much to shift the data
-        shift = center - (self.min_index + self.max_index) // 2
-        
-        # Update offset and range
-        self.offset = (self.offset + shift) % len(self.counts)
-        self.min_index = new_min
-        self.max_index = new_max
-        self.head = (self.head + shift) % len(self.counts)
-    
-    def _collapse_to_fit(self, new_min: int, new_max: int):
-        """Collapse buckets to fit the new range."""
-        # Calculate how many buckets we need to collapse
-        current_span = self.max_index - self.min_index + 1
-        new_span = new_max - new_min + 1
-        buckets_to_collapse = new_span - len(self.counts)
-        
-        if buckets_to_collapse <= 0:
-            return
-            
-        # Collapse buckets starting from the lowest index
-        # This maintains the shape of the distribution by collapsing from one end
-        for i in range(buckets_to_collapse):
-            # Find the next non-zero bucket after min_index
-            next_bucket = self.min_index + 1
-            while next_bucket <= self.max_index and self.get_count(next_bucket) == 0:
-                next_bucket += 1
-                
-            if next_bucket > self.max_index:
-                break  # No more buckets to collapse into
-                
-            # Merge min_index into next_bucket if min_index has counts
-            if self.get_count(self.min_index) > 0:
-                self.counts[self._get_position(next_bucket)] += self.counts[self._get_position(self.min_index)]
-                self.counts[self._get_position(self.min_index)] = 0
-                self.num_buckets -= 1
-                
-            # Move min_index up
-            self.min_index = next_bucket
-            self.head = self._get_position(self.min_index)
     
     def remove(self, bucket_index: int, count: int = 1):
         """
@@ -164,18 +151,21 @@ class ContiguousStorage(Storage):
                 elif bucket_index == self.min_index:
                     # Find new minimum index
                     for i in range(self.max_index - self.min_index + 1):
-                        pos = (self.head + i) % len(self.counts)
+                        pos = (self.arr_index_of_min_bucket + i) % len(self.counts)
                         if self.counts[pos] > 0:
                             self.min_index += i
-                            self.head = pos
+                            self.arr_index_of_min_bucket = pos
                             break
                 elif bucket_index == self.max_index:
                     # Find new maximum index
                     for i in range(self.max_index - self.min_index + 1):
-                        pos = (self.head + (self.max_index - self.min_index - i)) % len(self.counts)
+                        pos = (self.arr_index_of_min_bucket + (self.max_index - self.min_index - i)) % len(self.counts)
                         if self.counts[pos] > 0:
                             self.max_index -= i
                             break
+        else:
+            warnings.warn("Removing count from non-existent bucket. "
+                              "Bucket index is out of range.", UserWarning)
     
     def get_count(self, bucket_index: int) -> int:
         """
@@ -190,6 +180,9 @@ class ContiguousStorage(Storage):
         if self.min_index is None or bucket_index < self.min_index or bucket_index > self.max_index:
             return 0
         pos = self._get_position(bucket_index)
+        if bucket_index == 0:
+            print(pos)
+            print(self.counts)
         return int(self.counts[pos])
     
     def merge(self, other: 'ContiguousStorage'):
@@ -204,38 +197,30 @@ class ContiguousStorage(Storage):
             
         # Add each non-zero bucket
         for i in range(other.max_index - other.min_index + 1):
-            pos = (other.head + i) % len(other.counts)
+            pos = (other.arr_index_of_min_bucket + i) % len(other.counts)
             if other.counts[pos] > 0:
-                bucket_index = other.min_index + i
-                self.add(bucket_index, int(other.counts[pos]))
-    
+                self.add(other.min_index + i, int(other.counts[pos]))
+
     def collapse_smallest_buckets(self):
-        """Collapse the two buckets with smallest indices."""
-        if self.num_buckets < 2:
+        """
+        Collapse the two smallest index buckets to maintain max bucket limit.
+        For ContiguousStorage, this means combining the counts of the two lowest
+        buckets into the higher index bucket and adjusting the min_index.
+        """
+        if self.min_index is None or self.max_index is None or self.max_index - self.min_index < 1:
             return
-            
-        # Find first two non-zero buckets starting from min_index
-        first_pos = self.head
-        second_pos = None
+
+        # Get the two smallest buckets
+        min_pos = self._get_position(self.min_index)
+        next_pos = self._get_position(self.min_index + 1)
         
-        for i in range(self.max_index - self.min_index + 1):
-            pos = (self.head + i) % len(self.counts)
-            if self.counts[pos] > 0:
-                if first_pos == self.head:  # Still at initial position
-                    first_pos = pos
-                else:
-                    second_pos = pos
-                    break
-                    
-        # If we didn't find two non-zero buckets, nothing to collapse
-        if second_pos is None:
-            return
-                    
-        # Merge counts into second bucket
-        self.counts[second_pos] += self.counts[first_pos]
-        self.counts[first_pos] = 0
+        # Combine counts into the higher bucket
+        self.counts[next_pos] += self.counts[min_pos]
+        self.counts[min_pos] = 0
+        
+        # Update tracking variables
+        self.min_index += 1
+        self.arr_index_of_min_bucket = next_pos
         self.num_buckets -= 1
-        
-        # Update min_index and head
-        self.min_index += second_pos - first_pos
-        self.head = second_pos 
+        self.collapse_count += 1
+    

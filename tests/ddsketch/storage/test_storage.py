@@ -41,7 +41,7 @@ def test_storage_initialization(storage_class, max_buckets, bucket_strategy):
     if hasattr(storage, 'strategy'):
         assert storage.strategy == bucket_strategy
 
-def test_add_and_get_count(storage_class, max_buckets, bucket_strategy):
+def test_add_and_get_count(storage_class, max_buckets, bucket_strategy, capsys):
     if storage_class == ContiguousStorage:
         if bucket_strategy != BucketManagementStrategy.FIXED:
             pytest.skip("ContiguousStorage only supports FIXED strategy")
@@ -57,7 +57,10 @@ def test_add_and_get_count(storage_class, max_buckets, bucket_strategy):
     
     # Verify counts
     for bucket, expected_count in test_buckets.items():
-        assert storage.get_count(bucket) == expected_count
+        count = storage.get_count(bucket)
+        captured = capsys.readouterr()
+        print(f"Captured output: {captured.out}")  # This will show in test output with -s flag
+        assert count == expected_count
     
     # Test non-existent bucket
     assert storage.get_count(999) == 0

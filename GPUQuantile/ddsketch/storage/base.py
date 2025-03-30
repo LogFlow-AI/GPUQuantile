@@ -65,11 +65,6 @@ class Storage(ABC):
         """Merge another storage into this one."""
         pass
     
-    @abstractmethod
-    def collapse_smallest_buckets(self):
-        """Collapse the two smallest index buckets to maintain max bucket limit."""
-        pass
-    
     def _should_update_dynamic_limit(self) -> bool:
         """Check if we should update the dynamic limit based on order of magnitude change."""
         if self.strategy != BucketManagementStrategy.DYNAMIC:

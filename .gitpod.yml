@@ -5,8 +5,14 @@
 # Learn more from ready-to-use templates: https://www.gitpod.io/docs/introduction/getting-started/quickstart
 
 tasks:
-  - name: Setup pyenv-virtualenv
-    init: |
-      git clone https://github.com/pyenv/pyenv-virtualenv.git "$(pyenv root)/plugins/pyenv-virtualenv"
-      pyenv install 3.13.0
+  - name: Setup Python Environment
+    before: |
+      # Commands that should run before everything else
+      if [ ! -d "$(pyenv root)/plugins/pyenv-virtualenv" ]; then
+        git clone https://github.com/pyenv/pyenv-virtualenv.git "$(pyenv root)/plugins/pyenv-virtualenv"
+      fi
+    
+    command: |
+      # Commands that should run every time
+      pyenv install -s 3.13.0  # -s flag skips if already installed
       make install
