@@ -18,10 +18,10 @@ class ContiguousStorage(Storage):
     
     def __init__(self, max_buckets: int = 2048):
         """
-        Initialize a contiguous bucket storage with a fixed size.
+        Initialize contiguous storage.
         
         Args:
-            max_buckets: The maximum number of buckets to use.
+            max_buckets: Maximum number of buckets (default 2048).
         """
         if max_buckets <= 0:
             raise ValueError("max_buckets must be positive for ContiguousStorage")
@@ -130,7 +130,7 @@ class ContiguousStorage(Storage):
     
     def remove(self, bucket_index: int, count: int = 1) -> bool:
         """
-        Remove a count from a bucket.
+        Remove count from bucket_index.
         
         Args:
             bucket_index: The bucket index to remove from.
@@ -180,27 +180,28 @@ class ContiguousStorage(Storage):
     
     def get_count(self, bucket_index: int) -> int:
         """
-        Get the count for a bucket.
+        Get count for bucket_index.
         
         Args:
-            bucket_index: The bucket index to get the count for.
+            bucket_index: The bucket index to get count for.
             
         Returns:
-            The count for the bucket (0 if bucket doesn't exist).
+            The count at the specified bucket index.
         """
         if self.min_index is None or bucket_index < self.min_index or bucket_index > self.max_index:
             warnings.warn("Bucket index is out of range. Returning 0.", UserWarning)
             return 0
+        pos = self._get_position(bucket_index)
+        return int(self.counts[pos])
     
     def merge(self, other: 'ContiguousStorage'):
         """
-        Merge another ContiguousStorage into this one.
+        Merge another storage into this one.
         
         Args:
-            other: Another ContiguousStorage instance to merge.
+            other: Another ContiguousStorage instance to merge with this one.
         """
-        if other is None or other.min_index is None:
-            # Nothing to merge
+        if other.min_index is None:
             return
             
         # Add each non-zero bucket
@@ -208,15 +209,5 @@ class ContiguousStorage(Storage):
             pos = (other.arr_index_of_min_bucket + i) % len(other.counts)
             if other.counts[pos] > 0:
                 bucket_index = other.min_index + i
-                try:
-                    # Try to add directly to our storage
-                    pos = self._get_position(bucket_index)
-                    self.counts[pos] += other.counts[i]
-                except ValueError:
-                    # Out of range, need to add with potential resize
-                    try:
-                        self.add(bucket_index, other.counts[i])
-                    except ValueError:
-                        # If we can't add, just skip this bucket
-                        continue
+                self.add(bucket_index, int(other.counts[pos]))
     

@@ -58,20 +58,8 @@ class CubicInterpolationMapping(MappingScheme):
         return s * (self.C + s * (self.B + s * self.A))
         
     def compute_bucket_index(self, value: float) -> int:
-        """
-        Compute bucket index for a value.
-        
-        Args:
-            value: The value to map to a bucket index.
-            
-        Returns:
-            Bucket index.
-            
-        Raises:
-            ValueError: If value is zero or negative.
-        """
         if value <= 0:
-            raise ValueError("Value must be positive, got {}".format(value))
+            raise ValueError("Value must be positive")
             
         # Get binary exponent and normalized significand
         exponent, significand = self._extract_exponent_and_significand(value)
@@ -84,27 +72,15 @@ class CubicInterpolationMapping(MappingScheme):
         # where m is the optimal multiplier, e is the exponent,
         # P(s) is the cubic interpolation, and γ is (1+α)/(1-α)
         index = self.m * (exponent + interpolated) / self.log2_gamma
-        
-        # Use floor instead of ceil for better compliance with accuracy tests
-        return int(np.floor(index))
+        return int(np.ceil(index))
         
     def compute_value_from_index(self, index: float) -> float:
         """
         Compute the value from a bucket index using Cardano's formula
         for solving the cubic equation.
-        
-        Args:
-            index: Bucket index.
-            
-        Returns:
-            Representative value for the bucket.
         """
-        if index == np.iinfo(np.int32).min:
-            return 0.0
-            
         # Convert index to target log value
-        # Add 0.5 to use the middle of the bucket for better accuracy
-        target = ((index + 0.5) * self.log2_gamma) / self.m
+        target = (index * self.log2_gamma) / self.m
         
         # Extract integer and fractional parts
         e = int(np.floor(target))
