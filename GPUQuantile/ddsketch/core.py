@@ -70,8 +70,8 @@ class DDSketch:
             self.positive_store = ContiguousStorage(store_max_buckets)
             self.negative_store = ContiguousStorage(store_max_buckets) if cont_neg else None
         else:
-            self.positive_store = SparseStorage(store_max_buckets, bucket_strategy)
-            self.negative_store = SparseStorage(store_max_buckets, bucket_strategy) if cont_neg else None
+            self.positive_store = SparseStorage(strategy=bucket_strategy)
+            self.negative_store = SparseStorage(strategy=bucket_strategy) if cont_neg else None
             
         self.count = 0
         self.zero_count = 0

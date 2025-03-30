@@ -27,7 +27,10 @@ def test_storage_initialization(storage_class, max_buckets, bucket_strategy):
             pytest.skip("ContiguousStorage only supports FIXED strategy")
         storage = storage_class(max_buckets)
     else:
-        storage = storage_class(max_buckets, bucket_strategy)
+        if bucket_strategy == BucketManagementStrategy.FIXED:
+            storage = storage_class(max_buckets, bucket_strategy)
+        else:
+            storage = storage_class(strategy=bucket_strategy)
     
     # Check max_buckets based on strategy
     if bucket_strategy == BucketManagementStrategy.FIXED:
@@ -47,7 +50,10 @@ def test_add_and_get_count(storage_class, max_buckets, bucket_strategy):
             pytest.skip("ContiguousStorage only supports FIXED strategy")
         storage = storage_class(max_buckets)
     else:
-        storage = storage_class(max_buckets, bucket_strategy)
+        if bucket_strategy == BucketManagementStrategy.FIXED:
+            storage = storage_class(max_buckets, bucket_strategy)
+        else:
+            storage = storage_class(strategy=bucket_strategy)
     
     # Add counts to some buckets
     test_buckets = {0: 1, 5: 3, 10: 2}
@@ -61,7 +67,9 @@ def test_add_and_get_count(storage_class, max_buckets, bucket_strategy):
         assert count == expected_count
     
     # Test non-existent bucket
-    assert storage.get_count(999) == 0
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        assert storage.get_count(999) == 0
 
 def test_remove(storage_class, max_buckets, bucket_strategy):
     if storage_class == ContiguousStorage:
@@ -69,7 +77,10 @@ def test_remove(storage_class, max_buckets, bucket_strategy):
             pytest.skip("ContiguousStorage only supports FIXED strategy")
         storage = storage_class(max_buckets)
     else:
-        storage = storage_class(max_buckets, bucket_strategy)
+        if bucket_strategy == BucketManagementStrategy.FIXED:
+            storage = storage_class(max_buckets, bucket_strategy)
+        else:
+            storage = storage_class(strategy=bucket_strategy)
     
     # Add and remove counts
     bucket_idx = 5
@@ -79,9 +90,11 @@ def test_remove(storage_class, max_buckets, bucket_strategy):
     
     assert storage.get_count(bucket_idx) == 1
     
-    # Remove from empty bucket
-    storage.remove(999)  # Should not raise error
-    assert storage.get_count(999) == 0
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        # Remove from empty bucket
+        storage.remove(999)  # Should not raise error
+        assert storage.get_count(999) == 0
 
 def test_merge(storage_class, max_buckets, bucket_strategy):
     if storage_class == ContiguousStorage:
@@ -90,8 +103,12 @@ def test_merge(storage_class, max_buckets, bucket_strategy):
         storage1 = storage_class(max_buckets)
         storage2 = storage_class(max_buckets)
     else:
-        storage1 = storage_class(max_buckets, bucket_strategy)
-        storage2 = storage_class(max_buckets, bucket_strategy)
+        if bucket_strategy == BucketManagementStrategy.FIXED:
+            storage1 = storage_class(max_buckets, bucket_strategy)
+            storage2 = storage_class(max_buckets, bucket_strategy)
+        else:
+            storage1 = storage_class(strategy=bucket_strategy)
+            storage2 = storage_class(strategy=bucket_strategy)
     
     # Add counts to both storages
     storage1.add(0)
@@ -112,7 +129,10 @@ def test_bucket_limit(storage_class, max_buckets, bucket_strategy):
             pytest.skip("ContiguousStorage only supports FIXED strategy")
         storage = storage_class(max_buckets)
     else:
-        storage = storage_class(max_buckets, bucket_strategy)
+        if bucket_strategy == BucketManagementStrategy.FIXED:
+            storage = storage_class(max_buckets, bucket_strategy)
+        else:
+            storage = storage_class(strategy=bucket_strategy)
     
     # Add more buckets than max_buckets
     for i in range(max_buckets + 10):
@@ -170,7 +190,7 @@ def test_contiguous_storage_specific():
 
 def test_sparse_storage_specific():
     """Test SparseStorage-specific features"""
-    storage = SparseStorage(max_buckets=32, strategy=BucketManagementStrategy.DYNAMIC)
+    storage = SparseStorage(strategy=BucketManagementStrategy.DYNAMIC)
     
     # Test dynamic bucket management behavior
     # Add many buckets to force dynamic resizing
@@ -194,7 +214,10 @@ def test_storage_clear(storage_class, max_buckets, bucket_strategy):
             pytest.skip("ContiguousStorage only supports FIXED strategy")
         storage = storage_class(max_buckets)
     else:
-        storage = storage_class(max_buckets, bucket_strategy)
+        if bucket_strategy == BucketManagementStrategy.FIXED:
+            storage = storage_class(max_buckets, bucket_strategy)
+        else:
+            storage = storage_class(strategy=bucket_strategy)
     
     # Add some counts
     storage.add(0)
@@ -216,7 +239,10 @@ def test_negative_buckets(storage_class, max_buckets, bucket_strategy):
             pytest.skip("ContiguousStorage only supports FIXED strategy")
         storage = storage_class(max_buckets)
     else:
-        storage = storage_class(max_buckets, bucket_strategy)
+        if bucket_strategy == BucketManagementStrategy.FIXED:
+            storage = storage_class(max_buckets, bucket_strategy)
+        else:
+            storage = storage_class(strategy=bucket_strategy)
     
     # Test adding negative bucket indices
     if storage_class == SparseStorage:

@@ -24,6 +24,8 @@ class SparseStorage(Storage):
         """
         super().__init__(max_buckets, strategy)
         self.counts: Dict[int, int] = {}
+        self.min_index = None  # Minimum bucket index seen
+        self.max_index = None  # Maximum bucket index seen
     
     def add(self, bucket_index: int, count: int = 1):
         """
@@ -38,6 +40,12 @@ class SparseStorage(Storage):
             
         self.counts[bucket_index] = self.counts.get(bucket_index, 0) + count
         self.total_count += count
+        
+        # Update min and max indices
+        if self.min_index is None or bucket_index < self.min_index:
+            self.min_index = bucket_index
+        if self.max_index is None or bucket_index > self.max_index:
+            self.max_index = bucket_index
         
         if self.strategy == BucketManagementStrategy.DYNAMIC:
             self._update_dynamic_limit()
@@ -65,6 +73,15 @@ class SparseStorage(Storage):
         
         if self.counts[bucket_index] == 0:
             del self.counts[bucket_index]
+            # Update min and max indices if needed
+            if bucket_index == self.min_index or bucket_index == self.max_index:
+                if not self.counts:  # If no buckets left
+                    self.min_index = None
+                    self.max_index = None
+                else:
+                    # Recalculate min and max
+                    self.min_index = min(self.counts.keys())
+                    self.max_index = max(self.counts.keys())
             
         return True
     

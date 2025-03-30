@@ -1,5 +1,6 @@
 import pytest
 import numpy as np
+import warnings
 from GPUQuantile.ddsketch.core import DDSketch
 from GPUQuantile.ddsketch.storage.base import BucketManagementStrategy
 
@@ -64,7 +65,9 @@ def test_delete():
     assert sketch.count == len(values) - 1
     
     # Delete non-existent value (should not affect count)
-    sketch.delete(10.0)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        sketch.delete(10.0)
     assert sketch.count == len(values) - 1
 
 def test_quantile_edge_cases():
@@ -136,8 +139,11 @@ def test_different_storage_types():
     values = [1.0, 2.0, 3.0, 4.0, 5.0]
     
     # Test both storage strategies
-    for strategy in [BucketManagementStrategy.FIXED, BucketManagementStrategy.COLLAPSE]:
-        sketch = DDSketch(relative_accuracy=0.01, bucket_strategy=strategy)
+    for strategy in [BucketManagementStrategy.FIXED, BucketManagementStrategy.DYNAMIC, BucketManagementStrategy.UNLIMITED]:
+        if strategy == BucketManagementStrategy.FIXED:
+            sketch = DDSketch(relative_accuracy=0.01, max_buckets=1000, bucket_strategy=strategy)
+        else:
+            sketch = DDSketch(relative_accuracy=0.01, bucket_strategy=strategy)
         for v in values:
             sketch.insert(v)
         
@@ -148,8 +154,10 @@ def test_extreme_values():
     sketch = DDSketch(relative_accuracy=0.01)
     
     # Test very large and very small positive values
-    sketch.insert(1e-100)
-    sketch.insert(1e100)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        sketch.insert(1e-100)
+        sketch.insert(1e100)
     
     # Should handle these values without issues
     assert sketch.count == 2
