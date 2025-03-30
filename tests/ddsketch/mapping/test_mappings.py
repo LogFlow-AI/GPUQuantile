@@ -39,8 +39,7 @@ def test_value_reconstruction(mapping_class, relative_accuracy):
         # The relative error should be bounded by relative_accuracy
         # |reconstructed - value| / value <= relative_accuracy
         relative_error = abs(reconstructed - value) / value
-        print(f"Value: {value}, Reconstructed: {reconstructed}, Error: {relative_error}")
-        
+        # print(f"Value: {value}, Reconstructed: {reconstructed}, Error: {relative_error}")
         # Add small epsilon to account for floating-point precision
         epsilon = 1e-12
         assert relative_error <= relative_accuracy + epsilon, f"Relative error {relative_error} exceeds bound {relative_accuracy} for value {value}"
