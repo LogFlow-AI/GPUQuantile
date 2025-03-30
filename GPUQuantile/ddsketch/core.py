@@ -40,7 +40,7 @@ class DDSketch:
                         - 'lin_interpol': Linear interpolation mapping
                         - 'cub_interpol': Cubic interpolation mapping
             max_buckets: Maximum number of buckets per store (default 2048).
-                        If cont_neg is True, each store will have max_buckets/2 buckets.
+                        If cont_neg is True, each store will have max_buckets buckets.
             bucket_strategy: Strategy for managing bucket count.
                            If FIXED, uses ContiguousStorage, otherwise uses SparseStorage.
             cont_neg: Whether to handle negative values (default True).
@@ -54,8 +54,6 @@ class DDSketch:
         self.relative_accuracy = relative_accuracy
         self.cont_neg = cont_neg
         
-        # Adjust max_buckets if handling negative values
-        store_max_buckets = max_buckets // 2 if cont_neg else max_buckets
         
         # Initialize mapping scheme
         if mapping_type == 'logarithmic':
@@ -67,8 +65,8 @@ class DDSketch:
             
         # Choose storage type based on strategy
         if bucket_strategy == BucketManagementStrategy.FIXED:
-            self.positive_store = ContiguousStorage(store_max_buckets)
-            self.negative_store = ContiguousStorage(store_max_buckets) if cont_neg else None
+            self.positive_store = ContiguousStorage(max_buckets)
+            self.negative_store = ContiguousStorage(max_buckets) if cont_neg else None
         else:
             self.positive_store = SparseStorage(strategy=bucket_strategy)
             self.negative_store = SparseStorage(strategy=bucket_strategy) if cont_neg else None
