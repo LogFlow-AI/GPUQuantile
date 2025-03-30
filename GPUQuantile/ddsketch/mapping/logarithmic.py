@@ -11,7 +11,7 @@ class LogarithmicMapping(MappingScheme):
         
     def compute_bucket_index(self, value: float) -> int:
         if value <= 0:
-            raise ValueError("Value must be positive")
+            raise ValueError(f"Value must be positive, got {value}")
         # ceil(log_gamma(value) = ceil(log(value) / log(gamma))
         return int(np.ceil(np.log(value) * self.multiplier))
     
