@@ -7,6 +7,7 @@ from .mapping.cubic_interpolation import CubicInterpolationMapping
 from .storage.base import BucketManagementStrategy
 from .storage.contiguous import ContiguousStorage
 from .storage.sparse import SparseStorage
+import numpy as np
 
 class DDSketch:
     """
@@ -49,10 +50,14 @@ class DDSketch:
             ValueError: If relative_accuracy is not between 0 and 1.
         """
         if not 0 < relative_accuracy < 1:
-            raise ValueError("relative_accuracy must be between 0 and 1")
+            raise ValueError("Relative accuracy must be between 0 and 1")
             
         self.relative_accuracy = relative_accuracy
         self.cont_neg = cont_neg
+        self.count = 0
+        self.zero_count = 0  # Count of zero values (stored separately)
+        self.min_value = None  # Minimum value seen
+        self.max_value = None  # Maximum value seen
         
         
         # Initialize mapping scheme
@@ -62,7 +67,12 @@ class DDSketch:
             self.mapping = LinearInterpolationMapping(relative_accuracy)
         elif mapping_type == 'cub_interpol':
             self.mapping = CubicInterpolationMapping(relative_accuracy)
+        else:
+            raise ValueError(f"Unknown mapping type: {mapping_type}")
             
+        # Adjust max_buckets if handling negative values
+        store_max_buckets = max_buckets // 2 if cont_neg else max_buckets
+        
         # Choose storage type based on strategy
         if bucket_strategy == BucketManagementStrategy.FIXED:
             self.positive_store = ContiguousStorage(max_buckets)
@@ -82,29 +92,50 @@ class DDSketch:
             value: The value to insert.
             
         Raises:
-            ValueError: If value is negative and cont_neg is False.
+            ValueError: If the value is negative and cont_neg is False.
         """
+        if not self.cont_neg and value < 0:
+            raise ValueError("Negative values are not supported with cont_neg=False")
+            
+        # Handle min/max tracking
+        if self.count == 0:
+            self.min_value = value
+            self.max_value = value
+        else:
+            if value < self.min_value:
+                self.min_value = value
+            if value > self.max_value:
+                self.max_value = value
+                
+        # Handle zero values
         if value == 0:
             self.zero_count += 1
-        elif value > 0:
-            bucket_idx = self.mapping.compute_bucket_index(value)
-            self.positive_store.add(bucket_idx)
-        elif value < 0 and self.cont_neg:
-            bucket_idx = self.mapping.compute_bucket_index(-value)
-            self.negative_store.add(bucket_idx)
-        elif value < 0:
-            raise ValueError("Negative values not supported when cont_neg is False")
+            self.count += 1
+            return
+            
+        # Determine the bucket index
+        bucket_index = self.mapping.compute_bucket_index(abs(value))
+        
+        # Print bucket index for debugging - remove in production
+        # print(f"Value: {value}, Bucket index: {bucket_index}")
+            
+        # Insert into the appropriate store based on sign
+        if value > 0:
+            self.positive_store.add(bucket_index)
+        else:  # value < 0
+            self.negative_store.add(bucket_index)
+            
         self.count += 1
     
     def delete(self, value: Union[int, float]) -> None:
         """
         Delete a value from the sketch.
         
+        This is an approximate operation. It removes the value from the appropriate
+        bucket, but does not guarantee that the exact value is removed.
+        
         Args:
             value: The value to delete.
-            
-        Raises:
-            ValueError: If value is negative and cont_neg is False.
         """
         if self.count == 0:
             return
@@ -130,16 +161,14 @@ class DDSketch:
         Compute the approximate quantile.
         
         Args:
-            q: The desired quantile (between 0 and 1).
-            
+            q (float): The quantile to compute, must be between 0 and 1.
+
         Returns:
-            The approximate value at the specified quantile.
-            
+            float: The approximate value at the given quantile.
+
         Raises:
-            ValueError: If q is not between 0 and 1 or if the sketch is empty.
+            ValueError: If the sketch is empty or q is outside [0, 1].
         """
-        if not 0 <= q <= 1:
-            raise ValueError("Quantile must be between 0 and 1")
         if self.count == 0:
             raise ValueError("Cannot compute quantile of empty sketch")
             
@@ -177,19 +206,83 @@ class DDSketch:
         Merge another DDSketch into this one.
         
         Args:
-            other: Another DDSketch instance to merge with this one.
+            other: Another DDSketch to merge with this one.
+            
+        Returns:
+            self: This sketch after the merge.
             
         Raises:
-            ValueError: If the sketches are incompatible.
+            ValueError: If the sketches have different relative accuracy.
         """
         if self.relative_accuracy != other.relative_accuracy:
-            raise ValueError("Cannot merge sketches with different relative accuracies")
+            raise ValueError("Cannot merge sketches with different relative accuracy")
             
-        self.positive_store.merge(other.positive_store)
-        if self.cont_neg and other.cont_neg:
-            self.negative_store.merge(other.negative_store)
-        elif other.cont_neg and sum(other.negative_store.counts.values()) > 0:
-            raise ValueError("Cannot merge sketch containing negative values when cont_neg is False")
-            
+        # Merge zero counts 
         self.zero_count += other.zero_count
-        self.count += other.count 
+        
+        # Merge negative store if present
+        if other.negative_store is not None and other.cont_neg:
+            for bucket_index, count in other._get_specific_storage_items(other.negative_store):
+                if count > 0:
+                    self.negative_store.add(bucket_index, count)
+                    
+        # Merge positive store
+        for bucket_index, count in other._get_specific_storage_items(other.positive_store):
+            if count > 0:
+                self.positive_store.add(bucket_index, count)
+                
+        # Update count
+        self.count += other.count
+        
+        # Update min/max values
+        if other.min_value is not None:
+            if self.min_value is None or other.min_value < self.min_value:
+                self.min_value = other.min_value
+                
+        if other.max_value is not None:
+            if self.max_value is None or other.max_value > self.max_value:
+                self.max_value = other.max_value
+                
+        return self
+    
+    def _update_min_max_after_delete(self, deleted_value: float) -> None:
+        """
+        Update min and max values after a deletion operation.
+        This is called only when the min or max value was deleted.
+        
+        Args:
+            deleted_value: The value that was deleted.
+        """
+        # If we deleted the min value, recalculate min
+        if deleted_value == self.min_value:
+            if self.zero_count > 0:
+                self.min_value = 0
+            else:
+                # Find the smallest bucket with non-zero count
+                min_bucket = None
+                for bucket_index, count in self._get_specific_storage_items(self.positive_store):
+                    if count > 0 and (min_bucket is None or bucket_index < min_bucket):
+                        min_bucket = bucket_index
+                
+                if min_bucket is not None:
+                    self.min_value = self.mapping.compute_value_from_index(min_bucket)
+                else:
+                    # No more values in the sketch
+                    self.min_value = None
+        
+        # If we deleted the max value, recalculate max
+        if deleted_value == self.max_value:
+            if self.zero_count > 0:
+                self.max_value = 0
+            else:
+                # Find the largest bucket with non-zero count
+                max_bucket = None
+                for bucket_index, count in self._get_specific_storage_items(self.positive_store):
+                    if count > 0 and (max_bucket is None or bucket_index > max_bucket):
+                        max_bucket = bucket_index
+                
+                if max_bucket is not None:
+                    self.max_value = self.mapping.compute_value_from_index(max_bucket)
+                else:
+                    # No more values in the sketch
+                    self.max_value = None 

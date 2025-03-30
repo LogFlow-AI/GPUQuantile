@@ -19,7 +19,8 @@ INSTALL_REQUIRES = [
   "pandas",
   "pytest",
   "coverage",
-  
+  "scipy",
+  "matplotlib",
 ]
 ENTRY_POINTS = {
   

@@ -19,6 +19,9 @@ class LinearInterpolationMapping(MappingScheme):
         """
         Extract the binary exponent and normalized fraction from an IEEE 754 float.
         
+        Args:
+            value: The float value to decompose.
+            
         Returns:
             tuple: (exponent, normalized_fraction)
             where normalized_fraction is in [1, 2)
@@ -30,8 +33,20 @@ class LinearInterpolationMapping(MappingScheme):
         return exponent, normalized_fraction
         
     def compute_bucket_index(self, value: float) -> int:
+        """
+        Compute bucket index for a value.
+        
+        Args:
+            value: The value to map to a bucket index.
+            
+        Returns:
+            Bucket index.
+            
+        Raises:
+            ValueError: If value is zero or negative.
+        """
         if value <= 0:
-            raise ValueError("Value must be positive")
+            raise ValueError("Value must be positive, got {}".format(value))
             
         # Get binary exponent and normalized fraction
         exponent, normalized_fraction = self._extract_exponent(value)

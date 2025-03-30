@@ -1,12 +1,23 @@
-"""Storage implementations for DDSketch."""
+"""
+Storage implementations for DDSketch algorithm.
 
-from .base import Storage, BucketManagementStrategy
-from .contiguous import ContiguousStorage
-from .sparse import SparseStorage
+This module provides different storage strategies for DDSketch:
+
+- ContiguousStorage: Memory-efficient fixed-size array for a limited bucket range
+- SparseStorage: Hash-based structure for handling wider bucket ranges
+- BucketManagementStrategy: Enumeration of strategies for handling bucket limitations
+
+All storage classes derive from the Storage base class and provide methods to add,
+remove, and merge bucket counts, as well as retrieve counts for specific buckets.
+"""
+
+from GPUQuantile.ddsketch.storage.base import Storage, BucketManagementStrategy
+from GPUQuantile.ddsketch.storage.contiguous import ContiguousStorage
+from GPUQuantile.ddsketch.storage.sparse import SparseStorage
 
 __all__ = [
-    'Storage',
-    'ContiguousStorage',
-    'SparseStorage',
-    'BucketManagementStrategy'
+    "Storage",
+    "BucketManagementStrategy",
+    "ContiguousStorage",
+    "SparseStorage"
 ] 

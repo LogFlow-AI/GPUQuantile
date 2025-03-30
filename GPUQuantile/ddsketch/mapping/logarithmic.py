@@ -1,6 +1,7 @@
 """Logarithmic mapping scheme for DDSketch."""
 
-import numpy as np
+from math import log, pow, floor
+import sys
 from .base import MappingScheme
 
 class LogarithmicMapping(MappingScheme):
