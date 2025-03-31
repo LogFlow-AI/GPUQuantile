@@ -21,7 +21,8 @@ def cont_neg(request):
 
 @pytest.fixture(params=[
     BucketManagementStrategy.FIXED,
-    BucketManagementStrategy.DYNAMIC
+    BucketManagementStrategy.DYNAMIC,
+    BucketManagementStrategy.UNLIMITED
 ])
 def bucket_strategy(request):
     return request.param

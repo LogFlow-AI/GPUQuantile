@@ -1,5 +1,6 @@
 import pytest
 import numpy as np
+import warnings
 from GPUQuantile.ddsketch.core import DDSketch
 from GPUQuantile.ddsketch.storage.base import BucketManagementStrategy
 
@@ -66,7 +67,9 @@ def test_delete():
     assert sketch.count == len(values) - 1
     
     # Delete non-existent value (should not affect count)
-    sketch.delete(10.0)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        sketch.delete(10.0)
     assert sketch.count == len(values) - 1
 
 def test_quantile_edge_cases():
@@ -86,20 +89,34 @@ def test_quantile_edge_cases():
 def test_merge():
     sketch1 = DDSketch(relative_accuracy=0.01)
     sketch2 = DDSketch(relative_accuracy=0.01)
-    
-    # Add values to both sketches
-    for v in [1.0, 2.0, 3.0]:
+
+    # Generate Pareto distribution with shape parameter a=3 (finite variance)
+    np.random.seed(42)
+    values = (1 / (1 - np.random.random(1000)) ** (1/3))  # Inverse CDF method for Pareto
+    values = np.sort(values)  # Sort to make splitting deterministic
+    median_idx = len(values) // 2
+    true_median = values[median_idx]
+
+    # Split values between sketches
+    for v in values[:median_idx]:
         sketch1.insert(v)
-    for v in [4.0, 5.0, 6.0]:
+    for v in values[median_idx:]:
         sketch2.insert(v)
-    
+
     # Merge sketch2 into sketch1
     sketch1.merge(sketch2)
-    assert sketch1.count == 6
-    
-    # Test median of merged sketch (should be approximately 3.5)
-    # Use a relaxed tolerance for test stability
-    assert abs(sketch1.quantile(0.5) - 3.5) <= 3.5 * 0.2  # Relaxed tolerance for merging
+    assert sketch1.count == len(values)
+
+    # Test median of merged sketch
+    assert abs(sketch1.quantile(0.5) - true_median) <= true_median * 0.01
+
+    # Also test other quantiles
+    q1_idx = len(values) // 4
+    q3_idx = 3 * len(values) // 4
+    true_q1 = values[q1_idx]
+    true_q3 = values[q3_idx]
+    assert abs(sketch1.quantile(0.25) - true_q1) <= true_q1 * 0.01  # Q1
+    assert abs(sketch1.quantile(0.75) - true_q3) <= true_q3 * 0.01  # Q3
 
 def test_merge_incompatible():
     sketch1 = DDSketch(relative_accuracy=0.01)
@@ -132,30 +149,25 @@ def test_different_storage_types():
     values = [1.0, 2.0, 3.0, 4.0, 5.0]
     
     # Test both storage strategies
-    for strategy in [BucketManagementStrategy.FIXED, BucketManagementStrategy.DYNAMIC]:
-        sketch = DDSketch(relative_accuracy=0.01, bucket_strategy=strategy)
+    for strategy in [BucketManagementStrategy.FIXED, BucketManagementStrategy.DYNAMIC, BucketManagementStrategy.UNLIMITED]:
+        if strategy == BucketManagementStrategy.FIXED:
+            sketch = DDSketch(relative_accuracy=0.01, max_buckets=1000, bucket_strategy=strategy)
+        else:
+            sketch = DDSketch(relative_accuracy=0.01, bucket_strategy=strategy)
         for v in values:
             sketch.insert(v)
         
         # Verify median with a slightly higher tolerance
         assert abs(sketch.quantile(0.5) - 3.0) <= 3.0 * 0.02  # Double the relative accuracy for tests
 
-def test_extreme_values():
-    # Create sketch using SparseStorage for extreme values test since it can handle large range
-    from GPUQuantile.ddsketch.storage.sparse import SparseStorage
-    
-    # Create custom mappings and storage
-    positive_store = SparseStorage()
-    negative_store = SparseStorage()
+def test_extreme_values():    
     sketch = DDSketch(relative_accuracy=0.01)
     
-    # Replace the default storage with SparseStorage
-    sketch.positive_store = positive_store
-    sketch.negative_store = negative_store
-    
-    # Test very large and very small positive values with sparse storage
-    sketch.insert(1e-100)
-    sketch.insert(1e100)
+    # Test very large and very small positive values
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        sketch.insert(1e-100)
+        sketch.insert(1e100)
     
     # Should handle these values without issues using SparseStorage
     assert sketch.count == 2

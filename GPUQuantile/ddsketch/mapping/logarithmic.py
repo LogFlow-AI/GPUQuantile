@@ -1,62 +1,21 @@
 """Logarithmic mapping scheme for DDSketch."""
 
-from math import log, pow, floor
-import sys
+import numpy as np
 from .base import MappingScheme
 
 class LogarithmicMapping(MappingScheme):
-    """Mapping that uses logarithms to compute indices and values."""
-    
-    def __init__(self, relative_accuracy):
-        """Initialize a LogarithmicMapping with a given accuracy.
-        
-        Args:
-            relative_accuracy (float): Relative accuracy guarantee for the mapping.
-                Must be between 0 and 1.
-        """
+    def __init__(self, relative_accuracy: float):
         self.relative_accuracy = relative_accuracy
-        # gamma = (1 + accuracy) / (1 - accuracy)
-        self.gamma = (1.0 + relative_accuracy) / (1.0 - relative_accuracy)
-        self.multiplier = 1.0 / log(self.gamma)
-        self.min_possible = -sys.maxsize - 1  # For handling zero/negative values
+        self.gamma = (1 + relative_accuracy) / (1 - relative_accuracy)
+        self.multiplier = 1 / np.log(self.gamma)
         
-    def compute_bucket_index(self, value):
-        """Compute the bucket index for a given value.
-        
-        Args:
-            value (float): The value to compute the bucket index for.
-                Must be positive.
-                
-        Returns:
-            int: The bucket index for the value.
-            
-        Raises:
-            ValueError: If value is zero or negative.
-        """
+    def compute_bucket_index(self, value: float) -> int:
         if value <= 0:
-            raise ValueError("Value must be positive, got {}".format(value))
-
-        # Calculate the bucket index using floor for better compliance with tests
-        # This matches the theoretical definition in the paper
-        index = int(floor(log(value) * self.multiplier))
-        
-        return index
+            raise ValueError(f"Value must be positive, got {value}")
+        # ceil(log_gamma(value) = ceil(log(value) / log(gamma))
+        return int(np.ceil(np.log(value) * self.multiplier))
     
-    def compute_value_from_index(self, bucket_index):
-        """Compute the value at a given bucket index.
-        
-        Args:
-            bucket_index (int): The bucket index to compute the value for.
-                
-        Returns:
-            float: The value at the bucket index.
-        """
-        if bucket_index == self.min_possible:
-            return 0.0
-            
-        # Calculate the value from the bucket index
-        # For better accuracy, we use the middle of the bucket range
-        # This ensures the relative error is within bounds
-        value = pow(self.gamma, bucket_index + 0.5)
-        
-        return value
+    def compute_value_from_index(self, index: int) -> float:
+        # Return geometric mean of bucket boundaries
+        # This ensures the relative error is bounded by relative_accuracy
+        return np.power(self.gamma, index) * (2.0 / (1.0 + self.gamma))
